@@ -24,12 +24,12 @@ const AdminPage = () => {
   const [path, setPath] = useState<string>("");
   
   // Fetch all eggs
-  const { data: eggs, isLoading: eggsLoading } = useQuery({
+  const { data: eggs = [], isLoading: eggsLoading } = useQuery({
     queryKey: ["/api/admin/eggs"],
   });
   
   // Fetch all custom links
-  const { data: links, isLoading: linksLoading } = useQuery({
+  const { data: links = [], isLoading: linksLoading } = useQuery({
     queryKey: ["/api/admin/links"],
   });
   
@@ -199,7 +199,7 @@ const AdminPage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {eggs && eggs.map((egg: any) => (
+                    {Array.isArray(eggs) && eggs.map((egg: any) => (
                       <TableRow key={egg.id}>
                         <TableCell>Trứng #{egg.id}</TableCell>
                         <TableCell>
@@ -324,7 +324,7 @@ const AdminPage = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {links && links.map((link: LinkResponse) => (
+                      {Array.isArray(links) && links.map((link: LinkResponse) => (
                         <TableRow key={link.id}>
                           <TableCell className="font-medium">
                             <a 
@@ -362,7 +362,7 @@ const AdminPage = () => {
                         </TableRow>
                       ))}
                       
-                      {(!links || links.length === 0) && (
+                      {(!Array.isArray(links) || links.length === 0) && (
                         <TableRow>
                           <TableCell colSpan={4} className="text-center py-8">
                             Chưa có link nào được tạo

@@ -118,7 +118,13 @@ const Game = () => {
   return (
     <div className="relative min-h-screen flex flex-col items-center justify-center bg-[hsl(var(--blue-dark))]">
       {/* Main Game Area */}
-      <div className="relative w-full max-w-md mx-auto h-screen overflow-y-auto">
+      <div 
+        className="relative w-full max-w-md mx-auto h-screen overflow-y-auto"
+        style={{ 
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(255, 215, 0, 0.5) rgba(0, 0, 128, 0.2)'
+        }}
+      >
         <div className={`${gameBackground} fixed inset-0 opacity-40`}></div>
         
         <div className="relative min-h-screen flex flex-col p-4 z-10">
