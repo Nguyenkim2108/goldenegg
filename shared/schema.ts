@@ -60,6 +60,13 @@ export interface GameState {
   deadline: number;
   brokenEggs: number[];
   progress: number;
+  eggs?: EggData[];
+}
+
+export interface EggData {
+  id: number;
+  broken: boolean;
+  reward: number;
 }
 
 // Leaderboard entry type

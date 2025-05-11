@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { GameState, LeaderboardEntry } from "@shared/schema";
 import GameHeader from "@/components/GameHeader";
 import CountdownTimer from "@/components/CountdownTimer";
 import EggGrid from "@/components/EggGrid";
@@ -15,14 +16,15 @@ const Game = () => {
   const [currentReward, setCurrentReward] = useState<number>(0);
   const [progress, setProgress] = useState(0);
   const [brokenEggs, setBrokenEggs] = useState<number[]>([]);
+  const [eggRewards, setEggRewards] = useState<{[key: number]: number}>({});
 
   // Fetch game state from server
-  const { data: gameData, isLoading: gameLoading } = useQuery({
+  const { data: gameData, isLoading: gameLoading } = useQuery<GameState>({
     queryKey: ["/api/game-state"],
   });
 
   // Fetch leaderboard
-  const { data: leaderboard, isLoading: leaderboardLoading } = useQuery({
+  const { data: leaderboard, isLoading: leaderboardLoading } = useQuery<LeaderboardEntry[]>({
     queryKey: ["/api/leaderboard"],
   });
 
@@ -35,6 +37,12 @@ const Game = () => {
     onSuccess: (data) => {
       // Update broken eggs
       setBrokenEggs((prev) => [...prev, data.eggId]);
+      
+      // Store egg reward
+      setEggRewards(prev => ({
+        ...prev,
+        [data.eggId]: data.reward
+      }));
       
       // Show reward notification
       setCurrentReward(data.reward);
@@ -60,6 +68,7 @@ const Game = () => {
       // Reset broken eggs and progress
       setBrokenEggs([]);
       setProgress(0);
+      setEggRewards({});
       
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ["/api/game-state"] });
@@ -81,6 +90,14 @@ const Game = () => {
 
   // Calculate time remaining
   const deadline = gameData?.deadline || Date.now() + 24 * 60 * 60 * 1000; // Default 24h from now
+  
+  // Update UI when game state changes
+  useEffect(() => {
+    if (gameData && gameData.brokenEggs) {
+      setBrokenEggs(gameData.brokenEggs);
+      setProgress(gameData.progress || 0);
+    }
+  }, [gameData]);
   
   // Game background
   const gameBackground = "bg-gradient-to-b from-blue-900 to-blue-950";

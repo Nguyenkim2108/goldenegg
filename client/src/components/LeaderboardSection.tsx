@@ -1,16 +1,17 @@
 import { motion } from "framer-motion";
-import { User } from "@shared/schema";
+import { LeaderboardEntry } from "@shared/schema";
 
 interface LeaderboardSectionProps {
-  leaderboard: User[];
+  leaderboard: LeaderboardEntry[];
   isLoading: boolean;
 }
 
 const LeaderboardSection = ({ leaderboard, isLoading }: LeaderboardSectionProps) => {
   // Placeholder data for loading state
   const placeholderData = Array(3).fill(null).map((_, i) => ({
-    id: i + 1,
-    username: `${i + 1}st********`,
+    id: i +
+    1,
+    username: `${i + 1}${getOrdinalSuffix(i + 1)}********`,
     score: 0,
   }));
 
@@ -66,7 +67,7 @@ const LeaderboardSection = ({ leaderboard, isLoading }: LeaderboardSectionProps)
               }`}
             >
               <div className="text-white/90 text-sm font-medium truncate">
-                {isLoading ? user.username : `${index + 1}${getOrdinalSuffix(index + 1)}********`}
+                {isLoading ? user.username : user.username}
               </div>
               <div className="text-[hsl(var(--gold-primary))] font-bold text-sm">
                 {isLoading ? "---" : formatScore(user.score || 0)}
