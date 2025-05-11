@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { motion } from "framer-motion";
@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { UpdateEggRequest, CreateLinkRequest, LinkResponse } from "@shared/schema";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import QRCode from "qrcode";
 
 const AdminPage = () => {
   const { toast } = useToast();
@@ -22,6 +24,14 @@ const AdminPage = () => {
   const [domain, setDomain] = useState<string>("dammedaga.fun");
   const [subdomain, setSubdomain] = useState<string>("");
   const [path, setPath] = useState<string>("");
+  
+  // QR code dialog state
+  const [showQRCode, setShowQRCode] = useState<boolean>(false);
+  const [qrCodeURL, setQrCodeURL] = useState<string>("");
+  const [qrCodeData, setQrCodeData] = useState<string>("");
+  
+  // Republish state
+  const [republishLink, setRepublishLink] = useState<LinkResponse | null>(null);
   
   // Fetch all eggs
   const { data: eggs = [], isLoading: eggsLoading } = useQuery({
@@ -350,17 +360,51 @@ const AdminPage = () => {
                           {links[links.length-1].fullUrl}
                         </a>
                         <div className="flex space-x-2">
-                          <button className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md">
+                          <button 
+                            className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md" 
+                            onClick={() => {
+                              navigator.clipboard.writeText(links[links.length-1].fullUrl);
+                              toast({
+                                title: "Đã sao chép!",
+                                description: "Link đã được sao chép vào clipboard",
+                              });
+                            }}
+                          >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" />
                             </svg>
                           </button>
-                          <button className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md">
+                          <button 
+                            className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md"
+                            onClick={() => {
+                              setQrCodeURL(links[links.length-1].fullUrl);
+                              
+                              // Generate QR code
+                              QRCode.toDataURL(links[links.length-1].fullUrl, { width: 300 })
+                                .then((url) => {
+                                  setQrCodeData(url);
+                                  setShowQRCode(true);
+                                })
+                                .catch((err) => {
+                                  console.error(err);
+                                  toast({
+                                    title: "Lỗi!",
+                                    description: "Không thể tạo mã QR code",
+                                    variant: "destructive",
+                                  });
+                                });
+                            }}
+                          >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                             </svg>
                           </button>
-                          <button className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md">
+                          <button 
+                            className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md"
+                            onClick={() => {
+                              window.open(links[links.length-1].fullUrl, '_blank');
+                            }}
+                          >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                             </svg>
@@ -374,6 +418,18 @@ const AdminPage = () => {
                         variant="outline" 
                         size="sm"
                         className="bg-indigo-600 text-white border-0 hover:bg-indigo-700"
+                        onClick={() => {
+                          // Set values from the last link
+                          setSubdomain(links[links.length-1].subdomain);
+                          setDomain(links[links.length-1].domain);
+                          setPath(links[links.length-1].path);
+                          
+                          // Republish link using handleCreateLink
+                          toast({
+                            title: "Đang xuất bản lại...",
+                            description: "Đang tạo lại trang web của bạn"
+                          });
+                        }}
                       >
                         Xuất bản lại
                       </Button>
