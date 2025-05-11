@@ -104,6 +104,14 @@ const EggGrid = ({ brokenEggs, onEggClick }: EggGridProps) => {
                 {/* Glow effect for broken egg */}
                 <div className="absolute -inset-2 bg-[#FFD700]/30 rounded-full blur-lg animate-pulse"></div>
                 
+                {/* Reward amount */}
+                <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/3 z-20">
+                  <div className="bg-[hsl(var(--red-primary))] text-white px-3 py-1 rounded-md shadow-lg">
+                    <div className="text-sm font-bold">{egg.reward.toFixed(2)}</div>
+                    <div className="text-xs">Thưởng</div>
+                  </div>
+                </div>
+
                 {/* Broken egg shell */}
                 <svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto drop-shadow-xl relative z-10">
                   {/* Red pedestal */}

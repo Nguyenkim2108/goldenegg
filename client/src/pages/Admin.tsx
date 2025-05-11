@@ -13,6 +13,56 @@ import { UpdateEggRequest, CreateLinkRequest, LinkResponse } from "@shared/schem
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import QRCode from "qrcode";
 
+// QR Code dialog component
+const QRCodeDialog = ({ 
+  open, 
+  onOpenChange, 
+  qrCodeData, 
+  qrCodeURL 
+}: { 
+  open: boolean; 
+  onOpenChange: (open: boolean) => void; 
+  qrCodeData: string; 
+  qrCodeURL: string;
+}) => (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>Mã QR Code</DialogTitle>
+      </DialogHeader>
+      <div className="flex flex-col items-center justify-center py-4">
+        {qrCodeData && (
+          <>
+            <img src={qrCodeData} alt="QR Code" className="mb-4 border p-2 rounded-md" />
+            <p className="text-center text-sm text-gray-500">{qrCodeURL}</p>
+            <div className="flex space-x-2 mt-4">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  // Download QR code image
+                  const link = document.createElement('a');
+                  link.href = qrCodeData;
+                  link.download = 'qrcode.png';
+                  link.click();
+                }}
+              >
+                Tải xuống
+              </Button>
+              <Button 
+                size="sm" 
+                onClick={() => onOpenChange(false)}
+              >
+                Đóng
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </DialogContent>
+  </Dialog>
+);
+
 const AdminPage = () => {
   const { toast } = useToast();
   
@@ -177,6 +227,14 @@ const AdminPage = () => {
   
   return (
     <div className="container mx-auto py-8">
+      {/* QR Code Dialog */}
+      <QRCodeDialog 
+        open={showQRCode} 
+        onOpenChange={setShowQRCode} 
+        qrCodeData={qrCodeData} 
+        qrCodeURL={qrCodeURL}
+      />
+
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Trang quản trị</h1>
         <a 
@@ -477,7 +535,51 @@ const AdminPage = () => {
                           <TableCell>
                             {new Date(link.createdAt).toLocaleDateString()}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right space-x-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              className="mr-2"
+                              onClick={() => {
+                                // Copy link
+                                navigator.clipboard.writeText(link.fullUrl);
+                                toast({
+                                  title: "Đã sao chép!",
+                                  description: "Link đã được sao chép vào clipboard",
+                                });
+                              }}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" />
+                              </svg>
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              className="mr-2"
+                              onClick={() => {
+                                setQrCodeURL(link.fullUrl);
+                                
+                                // Generate QR code
+                                QRCode.toDataURL(link.fullUrl, { width: 300 })
+                                  .then((url) => {
+                                    setQrCodeData(url);
+                                    setShowQRCode(true);
+                                  })
+                                  .catch((err) => {
+                                    console.error(err);
+                                    toast({
+                                      title: "Lỗi!",
+                                      description: "Không thể tạo mã QR code",
+                                      variant: "destructive",
+                                    });
+                                  });
+                              }}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                              </svg>
+                            </Button>
                             <Button 
                               variant="destructive" 
                               size="sm"
