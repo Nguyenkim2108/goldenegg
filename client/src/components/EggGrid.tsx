@@ -21,28 +21,34 @@ const EggGrid = ({ brokenEggs, onEggClick }: EggGridProps) => {
 
   const [eggs, setEggs] = useState<EggData[]>([]);
   
-  // Generate predefined rewards to match the image example
-  const predefinedRewards = {
-    1: 1888.00,
-    2: 288.00,
-    3: 188.00,
-    4: 688.00,
-    5: 388.00,
-    6: 88.00,
-    7: 888.00,
-    8: 5789.00,
-    9: 388.00
-  };
-  
+  // Fetch egg data from Game component
   useEffect(() => {
-    // Initialize eggs with predefined rewards
-    const initialEggs = Array.from({ length: 9 }, (_, i) => ({
-      id: i + 1,
-      broken: brokenEggs.includes(i + 1),
-      reward: predefinedRewards[i + 1 as keyof typeof predefinedRewards] || Math.floor(Math.random() * (1000 - 50 + 1) + 50)
-    }));
+    // Get data from the API
+    const fetchEggData = async () => {
+      try {
+        const response = await fetch('/api/admin/eggs');
+        if (response.ok) {
+          const eggData = await response.json();
+          const mappedEggs = eggData.map((egg: any) => ({
+            id: egg.id,
+            broken: brokenEggs.includes(egg.id),
+            reward: egg.reward,
+          }));
+          setEggs(mappedEggs);
+        }
+      } catch (error) {
+        console.error('Error fetching egg data:', error);
+        // Fallback to initialize with empty rewards if API fails
+        const initialEggs = Array.from({ length: 9 }, (_, i) => ({
+          id: i + 1,
+          broken: brokenEggs.includes(i + 1),
+          reward: 100 + (i * 50)
+        }));
+        setEggs(initialEggs);
+      }
+    };
     
-    setEggs(initialEggs);
+    fetchEggData();
   }, []);
 
   // Update eggs when brokenEggs changes
