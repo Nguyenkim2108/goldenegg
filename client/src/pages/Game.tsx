@@ -3,11 +3,9 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { GameState, LeaderboardEntry } from "@shared/schema";
-import GameHeader from "@/components/GameHeader";
 import CountdownTimer from "@/components/CountdownTimer";
 import EggGrid from "@/components/EggGrid";
 import LeaderboardSection from "@/components/LeaderboardSection";
-import FooterNavigation from "@/components/FooterNavigation";
 import RewardNotification from "@/components/RewardNotification";
 
 const Game = () => {
@@ -83,9 +81,24 @@ const Game = () => {
     }
   };
 
-  // Handle claim button click
+  // Handle claim button click - Break random egg
   const handleClaimClick = () => {
-    claimRewards();
+    // Get available (non-broken) eggs
+    const availableEggs = Array.from({ length: 9 }, (_, i) => i + 1)
+      .filter(id => !brokenEggs.includes(id));
+    
+    // If all eggs are broken, claim rewards instead
+    if (availableEggs.length === 0) {
+      claimRewards();
+      return;
+    }
+    
+    // Choose a random egg from available eggs
+    const randomIndex = Math.floor(Math.random() * availableEggs.length);
+    const randomEggId = availableEggs[randomIndex];
+    
+    // Break the selected egg
+    breakEgg(randomEggId);
   };
 
   // Calculate time remaining
@@ -104,16 +117,13 @@ const Game = () => {
 
   return (
     <div className="relative min-h-screen flex flex-col items-center justify-center bg-[hsl(var(--blue-dark))]">
-      {/* Game Header */}
-      <GameHeader />
-      
       {/* Main Game Area */}
-      <div className="relative w-full max-w-md mx-auto h-screen overflow-hidden pt-16 pb-20">
-        <div className={`${gameBackground} h-full w-full absolute top-0 left-0 opacity-40`}></div>
+      <div className="relative w-full max-w-md mx-auto h-screen overflow-y-auto">
+        <div className={`${gameBackground} fixed inset-0 opacity-40`}></div>
         
-        <div className="relative h-full flex flex-col p-4 z-10">
+        <div className="relative min-h-screen flex flex-col p-4 z-10">
           {/* Game Title */}
-          <div className="text-center mb-2">
+          <div className="text-center mb-2 mt-4">
             <div className="inline-block px-4 py-0.5 bg-[hsl(var(--gold-primary))]/20 rounded-lg">
               <span className="text-[hsl(var(--gold-primary))] text-xs font-medium">BẤM VÀO TRỨNG VÀNG</span>
             </div>
@@ -158,11 +168,13 @@ const Game = () => {
           
           {/* Leaderboard Section */}
           <LeaderboardSection leaderboard={leaderboard || []} isLoading={leaderboardLoading} />
+          
+          {/* Admin link (hidden visually) */}
+          <div className="mt-4 mb-10 text-center opacity-10 hover:opacity-50 transition-opacity">
+            <a href="/login" className="text-xs text-white/50">Admin</a>
+          </div>
         </div>
       </div>
-      
-      {/* Footer Navigation */}
-      <FooterNavigation />
       
       {/* Reward Notification */}
       <RewardNotification 

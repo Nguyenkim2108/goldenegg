@@ -116,7 +116,7 @@ export interface LinkResponse {
   fullUrl: string;
   subdomain: string;
   domain: string;
-  path: string;
+  path: string | "";
   active: boolean;
   createdAt: string;
 }

@@ -56,7 +56,7 @@ const EggGrid = ({ brokenEggs, onEggClick }: EggGridProps) => {
   // Animation variants for eggs
   const eggVariants = {
     idle: {
-      y: [0, -10, 0],
+      y: [0, -5, 0],
       transition: {
         duration: 3,
         repeat: Infinity,
@@ -64,7 +64,7 @@ const EggGrid = ({ brokenEggs, onEggClick }: EggGridProps) => {
       },
     },
     tap: {
-      scale: 0.9,
+      scale: 0.95,
     },
     broken: {
       scale: [1, 1.2, 1],
@@ -78,7 +78,7 @@ const EggGrid = ({ brokenEggs, onEggClick }: EggGridProps) => {
   };
 
   return (
-    <div className="grid grid-cols-3 gap-4 mb-4">
+    <div className="grid grid-cols-3 gap-2 mb-4">
       {eggs.map((egg) => (
         <div 
           key={egg.id} 
@@ -96,12 +96,25 @@ const EggGrid = ({ brokenEggs, onEggClick }: EggGridProps) => {
               // Broken egg with reward display
               <div className="relative">
                 {/* Glow effect for broken egg */}
-                <div className="absolute inset-0 bg-[#FFD700]/20 rounded-full blur-md"></div>
+                <div className="absolute -inset-2 bg-[#FFD700]/30 rounded-full blur-lg animate-pulse"></div>
                 
                 {/* Broken egg shell */}
-                <svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto drop-shadow-lg relative z-10">
+                <svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto drop-shadow-xl relative z-10">
                   {/* Red pedestal */}
-                  <ellipse cx="50" cy="100" rx="30" ry="10" fill="#E62E2E" />
+                  <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="5" result="blur" />
+                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                  </filter>
+                  
+                  <defs>
+                    <radialGradient id="redGlow" cx="50%" cy="100%" r="50%" fx="50%" fy="90%">
+                      <stop offset="0%" stopColor="#FF5252" />
+                      <stop offset="100%" stopColor="#B71C1C" />
+                    </radialGradient>
+                  </defs>
+                  
+                  {/* Red pedestal with glow */}
+                  <ellipse cx="50" cy="100" rx="30" ry="10" fill="url(#redGlow)" filter="url(#glow)" />
                   
                   {/* Broken top part */}
                   <path d="M35,60 C35,40 65,40 65,60 L60,75 L40,75 Z" fill="url(#goldGradient)" />
@@ -109,14 +122,38 @@ const EggGrid = ({ brokenEggs, onEggClick }: EggGridProps) => {
                   {/* Broken bottom part */}
                   <path d="M30,80 C30,95 70,95 70,80 L65,75 L58,85 L50,73 L42,85 L35,75 Z" fill="url(#goldGradient)" />
                   
-                  {/* Gold gradient definition */}
+                  {/* Gold sparkles */}
+                  <circle cx="30" cy="60" r="1" fill="white">
+                    <animate attributeName="opacity" values="0;1;0" dur="2s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="70" cy="60" r="1.5" fill="white">
+                    <animate attributeName="opacity" values="0;1;0" dur="1.7s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="40" cy="75" r="1" fill="white">
+                    <animate attributeName="opacity" values="0;1;0" dur="2.3s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="60" cy="80" r="1.2" fill="white">
+                    <animate attributeName="opacity" values="0;1;0" dur="1.8s" repeatCount="indefinite" />
+                  </circle>
+                  
+                  {/* Gold gradient definition with shimmer */}
                   <defs>
                     <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#FFF9C4" />
-                      <stop offset="25%" stopColor="#FFF176" />
-                      <stop offset="50%" stopColor="#FFD700" />
-                      <stop offset="75%" stopColor="#FFC107" />
-                      <stop offset="100%" stopColor="#FF8F00" />
+                      <stop offset="0%" stopColor="#FFF9C4">
+                        <animate attributeName="stop-color" values="#FFF9C4;#FFECB3;#FFF9C4" dur="2s" repeatCount="indefinite" />
+                      </stop>
+                      <stop offset="25%" stopColor="#FFF176">
+                        <animate attributeName="stop-color" values="#FFF176;#FFD54F;#FFF176" dur="2s" repeatCount="indefinite" />
+                      </stop>
+                      <stop offset="50%" stopColor="#FFD700">
+                        <animate attributeName="stop-color" values="#FFD700;#FFC107;#FFD700" dur="2s" repeatCount="indefinite" />
+                      </stop>
+                      <stop offset="75%" stopColor="#FFC107">
+                        <animate attributeName="stop-color" values="#FFC107;#FFB300;#FFC107" dur="2s" repeatCount="indefinite" />
+                      </stop>
+                      <stop offset="100%" stopColor="#FF8F00">
+                        <animate attributeName="stop-color" values="#FF8F00;#FF6F00;#FF8F00" dur="2s" repeatCount="indefinite" />
+                      </stop>
                     </linearGradient>
                   </defs>
                 </svg>
@@ -131,12 +168,25 @@ const EggGrid = ({ brokenEggs, onEggClick }: EggGridProps) => {
               </div>
             ) : (
               // Intact egg
-              <svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto drop-shadow-lg">
-                {/* Red pedestal */}
-                <ellipse cx="50" cy="100" rx="30" ry="10" fill="#E62E2E" />
+              <svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto drop-shadow-xl">
+                {/* Add glow filter */}
+                <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="5" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+                
+                <defs>
+                  <radialGradient id="redGlow" cx="50%" cy="100%" r="50%" fx="50%" fy="90%">
+                    <stop offset="0%" stopColor="#FF5252" />
+                    <stop offset="100%" stopColor="#B71C1C" />
+                  </radialGradient>
+                </defs>
+                
+                {/* Red pedestal with glow */}
+                <ellipse cx="50" cy="100" rx="30" ry="10" fill="url(#redGlow)" filter="url(#glow)" />
                 
                 {/* Golden egg */}
-                <ellipse cx="50" cy="50" rx="30" ry="40" fill="url(#goldGradient)" />
+                <ellipse cx="50" cy="50" rx="30" ry="40" fill="url(#goldShimmer)" />
                 
                 {/* Egg shine */}
                 <ellipse cx="40" cy="35" rx="10" ry="15" fill="rgba(255, 255, 255, 0.5)" />
@@ -144,14 +194,38 @@ const EggGrid = ({ brokenEggs, onEggClick }: EggGridProps) => {
                 {/* Egg shadow */}
                 <ellipse cx="50" cy="95" rx="25" ry="5" fill="rgba(0, 0, 0, 0.3)" />
                 
-                {/* Gold gradient definition */}
+                {/* Gold sparkles */}
+                <circle cx="35" cy="30" r="1" fill="white">
+                  <animate attributeName="opacity" values="0;1;0" dur="2s" repeatCount="indefinite" />
+                </circle>
+                <circle cx="65" cy="40" r="1.5" fill="white">
+                  <animate attributeName="opacity" values="0;1;0" dur="1.7s" repeatCount="indefinite" />
+                </circle>
+                <circle cx="55" cy="25" r="1" fill="white">
+                  <animate attributeName="opacity" values="0;1;0" dur="2.3s" repeatCount="indefinite" />
+                </circle>
+                <circle cx="40" cy="65" r="1.2" fill="white">
+                  <animate attributeName="opacity" values="0;1;0" dur="1.8s" repeatCount="indefinite" />
+                </circle>
+                
+                {/* Gold gradient definition with shimmer animation */}
                 <defs>
-                  <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#FFF9C4" />
-                    <stop offset="25%" stopColor="#FFF176" />
-                    <stop offset="50%" stopColor="#FFD700" />
-                    <stop offset="75%" stopColor="#FFC107" />
-                    <stop offset="100%" stopColor="#FF8F00" />
+                  <linearGradient id="goldShimmer" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#FFF9C4">
+                      <animate attributeName="stop-color" values="#FFF9C4;#FFECB3;#FFF9C4" dur="2s" repeatCount="indefinite" />
+                    </stop>
+                    <stop offset="25%" stopColor="#FFF176">
+                      <animate attributeName="stop-color" values="#FFF176;#FFD54F;#FFF176" dur="2s" repeatCount="indefinite" />
+                    </stop>
+                    <stop offset="50%" stopColor="#FFD700">
+                      <animate attributeName="stop-color" values="#FFD700;#FFC107;#FFD700" dur="2s" repeatCount="indefinite" />
+                    </stop>
+                    <stop offset="75%" stopColor="#FFC107">
+                      <animate attributeName="stop-color" values="#FFC107;#FFB300;#FFC107" dur="2s" repeatCount="indefinite" />
+                    </stop>
+                    <stop offset="100%" stopColor="#FF8F00">
+                      <animate attributeName="stop-color" values="#FF8F00;#FF6F00;#FF8F00" dur="2s" repeatCount="indefinite" />
+                    </stop>
                   </linearGradient>
                 </defs>
               </svg>

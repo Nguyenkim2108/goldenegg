@@ -277,10 +277,10 @@ export class MemStorage implements IStorage {
 
     return {
       id,
-      fullUrl: `https://${customLink.subdomain}.${customLink.domain}${customLink.path}`,
+      fullUrl: `https://${customLink.subdomain}.${customLink.domain}${customLink.path || ''}`,
       subdomain: customLink.subdomain,
       domain: customLink.domain,
-      path: customLink.path,
+      path: customLink.path || '',
       active: customLink.active,
       createdAt: customLink.createdAt.toISOString()
     };
