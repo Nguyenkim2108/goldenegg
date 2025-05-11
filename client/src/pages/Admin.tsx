@@ -266,50 +266,58 @@ const AdminPage = () => {
             {/* Create link form */}
             <Card>
               <CardHeader>
-                <CardTitle>Tạo link mới</CardTitle>
+                <CardTitle>Xuất bản Landing Page</CardTitle>
                 <CardDescription>
-                  Tạo link tùy chỉnh cho khách hàng
+                  Tên miền riêng
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleCreateLink} className="space-y-4">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="subdomain">Tên miền phụ</Label>
-                      <Input
-                        id="subdomain"
-                        placeholder="ten-mien-phu"
-                        value={subdomain}
-                        onChange={(e) => setSubdomain(e.target.value)}
-                        required
-                      />
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="subdomain">Tên miền phụ</Label>
+                        <Input
+                          id="subdomain"
+                          placeholder="ten-mien-phu"
+                          value={subdomain}
+                          onChange={(e) => setSubdomain(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="domain">Tên miền chính</Label>
+                        <Input
+                          id="domain"
+                          value={domain}
+                          onChange={(e) => setDomain(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="path">Đường dẫn (không bắt buộc)</Label>
+                        <Input
+                          id="path"
+                          placeholder="/duong-dan"
+                          value={path}
+                          onChange={(e) => setPath(e.target.value)}
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="domain">Tên miền chính</Label>
-                      <Input
-                        id="domain"
-                        value={domain}
-                        onChange={(e) => setDomain(e.target.value)}
-                      />
+
+                    <div className="flex justify-between items-center">
+                      <div className="text-sm text-gray-500">
+                        Preview: https://{subdomain}.{domain}{path}
+                      </div>
+                      <div>
+                        <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">Xuất bản</Button>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="path">Đường dẫn (không bắt buộc)</Label>
-                      <Input
-                        id="path"
-                        placeholder="/duong-dan"
-                        value={path}
-                        onChange={(e) => setPath(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end">
-                    <Button type="submit">Tạo link</Button>
                   </div>
                 </form>
               </CardContent>
             </Card>
             
-            {/* Links list */}
+            {/* Links list with success notification */}
             <Card>
               <CardHeader>
                 <CardTitle>Danh sách links</CardTitle>
@@ -318,6 +326,61 @@ const AdminPage = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                {/* Success message when link created */}
+                {Array.isArray(links) && links.length > 0 && (
+                  <div className="mb-6 border border-green-200 bg-green-50 rounded-md p-4">
+                    <div className="flex items-center mb-2">
+                      <div className="mr-2 flex-shrink-0 h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+                        <svg className="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-semibold text-green-800">Mừng quá, xuất bản thành công rồi!</h3>
+                    </div>
+                    
+                    <div className="mt-3 bg-white p-3 rounded-md border border-gray-200">
+                      <div className="text-sm font-medium text-gray-600 mb-1">Trang của bạn</div>
+                      <div className="flex items-center justify-between">
+                        <a 
+                          href={links[links.length-1].fullUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline text-sm"
+                        >
+                          {links[links.length-1].fullUrl}
+                        </a>
+                        <div className="flex space-x-2">
+                          <button className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                          </button>
+                          <button className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                          </button>
+                          <button className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 text-center">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="bg-indigo-600 text-white border-0 hover:bg-indigo-700"
+                      >
+                        Xuất bản lại
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              
                 {linksLoading ? (
                   <div className="flex justify-center py-4">Đang tải...</div>
                 ) : (

@@ -175,9 +175,9 @@ const Game = () => {
           {/* Leaderboard Section */}
           <LeaderboardSection leaderboard={leaderboard || []} isLoading={leaderboardLoading} />
           
-          {/* Admin link (hidden visually) */}
-          <div className="mt-4 mb-10 text-center opacity-10 hover:opacity-50 transition-opacity">
-            <a href="/login" className="text-xs text-white/50">Admin</a>
+          {/* Admin link */}
+          <div className="mt-4 mb-10 text-center opacity-20 hover:opacity-80 transition-opacity">
+            <a href="/admin" className="text-xs text-white/60">Admin</a>
           </div>
         </div>
       </div>
