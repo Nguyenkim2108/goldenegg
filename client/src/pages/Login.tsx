@@ -31,14 +31,14 @@ const LoginPage = () => {
           title: "Đăng nhập thành công",
           description: "Chào mừng quản trị viên!",
         });
-        setLocation("/admin");
+        window.location.href = "/admin";
       } else {
         // Redirect to game page for regular users
         toast({
           title: "Đăng nhập thành công",
           description: "Chào mừng quay trở lại!",
         });
-        setLocation("/");
+        window.location.href = "/";
       }
     },
     onError: (error) => {

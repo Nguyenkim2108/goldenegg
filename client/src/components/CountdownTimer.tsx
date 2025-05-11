@@ -47,20 +47,20 @@ const CountdownTimer = ({ deadline }: CountdownTimerProps) => {
     <div className="flex items-center justify-center mb-4">
       <div className="flex items-center space-x-1 bg-black/50 px-3 py-1.5 rounded-lg">
         <span className="text-[hsl(var(--gold-primary))] text-xs mr-1">Thời gian còn lại</span>
-        <div className="w-7 h-7 flex items-center justify-center bg-black/70 rounded">
-          <span className="text-white text-xs font-bold">
+        <div className="w-8 h-8 flex items-center justify-center bg-black/70 rounded">
+          <span className="text-white text-sm font-bold">
             {formatNumber(timeRemaining.hours)}
           </span>
         </div>
-        <span className="text-white">:</span>
-        <div className="w-7 h-7 flex items-center justify-center bg-black/70 rounded">
-          <span className="text-white text-xs font-bold">
+        <span className="text-white animate-pulse">:</span>
+        <div className="w-8 h-8 flex items-center justify-center bg-black/70 rounded">
+          <span className="text-white text-sm font-bold">
             {formatNumber(timeRemaining.minutes)}
           </span>
         </div>
-        <span className="text-white">:</span>
-        <div className="w-7 h-7 flex items-center justify-center bg-black/70 rounded">
-          <span className="text-white text-xs font-bold">
+        <span className="text-white animate-pulse">:</span>
+        <div className="w-8 h-8 flex items-center justify-center bg-black/70 rounded">
+          <span className="text-white text-sm font-bold">
             {formatNumber(timeRemaining.seconds)}
           </span>
         </div>

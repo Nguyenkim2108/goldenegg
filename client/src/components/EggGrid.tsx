@@ -160,9 +160,9 @@ const EggGrid = ({ brokenEggs, onEggClick }: EggGridProps) => {
                 
                 {/* Reward text on broken egg */}
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center bg-[#E62E2E] bg-opacity-90 rounded-lg px-1 py-0.5">
-                    <div className="text-xs text-white font-bold">{formatReward(egg.reward)}</div>
-                    <div className="text-[10px] text-white">Thưởng</div>
+                  <div className="text-center bg-[#E62E2E] bg-opacity-90 rounded-lg px-3 py-1 z-20">
+                    <div className="text-sm text-white font-bold">{formatReward(egg.reward)}</div>
+                    <div className="text-xs text-white">Thưởng</div>
                   </div>
                 </div>
               </div>

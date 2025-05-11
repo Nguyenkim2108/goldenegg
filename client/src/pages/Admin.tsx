@@ -167,7 +167,15 @@ const AdminPage = () => {
   
   return (
     <div className="container mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Trang quản trị</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Trang quản trị</h1>
+        <a 
+          href="/" 
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+        >
+          Quay lại trang chính
+        </a>
+      </div>
       
       <Tabs defaultValue="eggs">
         <TabsList className="mb-4">
