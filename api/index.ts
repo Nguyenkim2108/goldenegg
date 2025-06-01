@@ -1,72 +1,50 @@
-import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "../server/routes";
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// Simple log function for Vercel
-const log = (message: string) => {
-  console.log(`[${new Date().toISOString()}] ${message}`);
-};
+export default function handler(req: VercelRequest, res: VercelResponse) {
+  try {
+    console.log(`API called: ${req.method} ${req.url}`);
 
-const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+    // Set CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
 
-// CORS for Vercel
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
-});
-
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
+    // Handle OPTIONS request
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
     }
-  });
 
-  next();
-});
+    // Handle different routes
+    if (req.url === '/api/test' || req.url === '/test') {
+      return res.status(200).json({
+        message: "API is working!",
+        timestamp: new Date().toISOString(),
+        method: req.method,
+        url: req.url,
+        success: true
+      });
+    }
 
-// Initialize routes - don't await the server creation
-try {
-  registerRoutes(app);
-  console.log("Routes registered successfully");
-} catch (error) {
-  console.error("Failed to register routes:", error);
+    if (req.url === '/api/health' || req.url === '/health') {
+      return res.status(200).json({
+        status: "healthy",
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Default response
+    res.status(200).json({
+      message: "Vercel API function is working",
+      timestamp: new Date().toISOString(),
+      method: req.method,
+      url: req.url
+    });
+
+  } catch (error) {
+    console.error("API error:", error);
+    res.status(500).json({
+      message: "Internal server error",
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
 }
-
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  const status = err.status || err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
-
-  res.status(status).json({ message });
-  console.error(err);
-});
-
-export default app;
