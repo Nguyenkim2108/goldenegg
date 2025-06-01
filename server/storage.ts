@@ -63,7 +63,7 @@ export interface IStorage extends AdminOperations {
   // Game specific methods
   getGameState(linkId?: number): Promise<GameState>;
   breakEgg(eggId: number, linkId?: number): Promise<BreakEggResult>;
-  revealAllEggs(linkId: number, brokenEggId: number, actualReward: number): Promise<RevealAllEggsResult>;
+  revealAllEggs(linkId: number, brokenEggId: number, actualReward: number | string): Promise<RevealAllEggsResult>;
   claimRewards(): Promise<ClaimRewardsResult>;
   resetGame(): Promise<void>;
 }
@@ -260,7 +260,7 @@ export class MemStorage implements IStorage {
   }
   
   // Hàm mới để tiết lộ tất cả các quả trứng sau khi đập 1 quả
-  async revealAllEggs(linkId: number, brokenEggId: number, actualReward: number): Promise<RevealAllEggsResult> {
+  async revealAllEggs(linkId: number, brokenEggId: number, actualReward: number | string): Promise<RevealAllEggsResult> {
     const link = this.customLinks.get(linkId);
     if (!link) {
       throw new Error(`Link với ID ${linkId} không tồn tại`);

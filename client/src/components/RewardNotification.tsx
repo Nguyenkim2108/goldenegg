@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 interface RewardNotificationProps {
   isOpen: boolean;
   onClose: () => void;
-  reward: number;
+  reward: number | string;
 }
 
 // Tạo hiệu ứng confetti
@@ -89,8 +89,8 @@ const RewardNotification = ({ isOpen, onClose, reward }: RewardNotificationProps
     { top: '85%', left: '20%' },
   ];
   
-  // Format reward để hiển thị 2 số thập phân
-  const formattedReward = reward.toFixed(2);
+  // Format reward để hiển thị 2 số thập phân hoặc text
+  const formattedReward = typeof reward === 'string' ? reward : reward.toFixed(2);
   
   return (
     <AnimatePresence>

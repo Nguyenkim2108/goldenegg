@@ -154,6 +154,6 @@ export interface SetEggBrokenStateRequest {
 export interface RevealAllEggsResult {
   eggs: EggData[];
   brokenEggId: number;
-  reward: number;
+  reward: number | string; // Cho phép cả số và text
   success: boolean;
 }

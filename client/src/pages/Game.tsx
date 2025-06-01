@@ -10,7 +10,7 @@ import RewardNotification from "@/components/RewardNotification";
 const Game = () => {
   // Game state
   const [showReward, setShowReward] = useState(false);
-  const [currentReward, setCurrentReward] = useState<number>(0);
+  const [currentReward, setCurrentReward] = useState<number | string>(0);
   const [progress, setProgress] = useState(0);
   const [brokenEggs, setBrokenEggs] = useState<number[]>([]);
   const [eggRewards, setEggRewards] = useState<{[key: number]: number | string}>({});
