@@ -1,17 +1,14 @@
-import { 
-  GameState, 
-  User, 
-  CustomLink, 
-  UpdateEggRequest, 
-  CreateLinkRequest, 
+import {
+  GameState,
+  User,
+  CustomLink,
+  UpdateEggRequest,
+  CreateLinkRequest,
   LinkResponse,
   GameLinkInfo,
   RevealAllEggsResult,
-  EggData as SchemaEggData 
-} from "@shared/schema";
-import { db } from "./db";
-import { eq } from "drizzle-orm";
-import { users, customLinks } from "@shared/schema";
+  EggData as SchemaEggData
+} from "../shared/types";
 
 // Constants for game logic
 const TOTAL_EGGS = 8; // Đồng bộ với frontend - chỉ hiển thị 8 quả trứng
