@@ -11,7 +11,11 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { useToast } from "@/hooks/use-toast";
 import { UpdateEggRequest, CreateLinkRequest, LinkResponse } from "@shared/schema";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import QRCode from "qrcode";
+import { Slider } from "@/components/ui/slider";
+import { Separator } from "@/components/ui/separator";
 
 // QR Code dialog component
 const QRCodeDialog = ({ 
@@ -63,15 +67,24 @@ const QRCodeDialog = ({
   </Dialog>
 );
 
+interface EggData {
+  id: number;
+  reward: number;
+  broken: boolean;
+  winningRate: number;
+}
+
 const AdminPage = () => {
   const { toast } = useToast();
   
   // Game eggs state
   const [editingEgg, setEditingEgg] = useState<number | null>(null);
-  const [eggReward, setEggReward] = useState<number>(0);
+  const [eggReward, setEggReward] = useState<string>("0"); // Thay đổi thành string
+  const [eggWinningRate, setEggWinningRate] = useState<number>(100);
   
   // Custom link state
-  const [domain, setDomain] = useState<string>("dammedaga.fun");
+  const [protocol, setProtocol] = useState<string>("https");
+  const [domain, setDomain] = useState<string>("");
   const [subdomain, setSubdomain] = useState<string>("");
   const [path, setPath] = useState<string>("");
   
@@ -84,12 +97,12 @@ const AdminPage = () => {
   const [republishLink, setRepublishLink] = useState<LinkResponse | null>(null);
   
   // Fetch all eggs
-  const { data: eggs = [], isLoading: eggsLoading } = useQuery({
+  const { data: eggs = [], isLoading: eggsLoading } = useQuery<EggData[]>({
     queryKey: ["/api/admin/eggs"],
   });
   
   // Fetch all custom links
-  const { data: links = [], isLoading: linksLoading } = useQuery({
+  const { data: links = [], isLoading: linksLoading } = useQuery<LinkResponse[]>({
     queryKey: ["/api/admin/links"],
   });
   
@@ -103,12 +116,13 @@ const AdminPage = () => {
       // Show success message
       toast({
         title: "Cập nhật thành công",
-        description: "Phần thưởng đã được cập nhật.",
+        description: "Phần thưởng và tỉ lệ trúng thưởng đã được cập nhật.",
       });
       
       // Reset state
       setEditingEgg(null);
-      setEggReward(0);
+      setEggReward("0");
+      setEggWinningRate(100);
       
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ["/api/admin/eggs"] });
@@ -117,7 +131,33 @@ const AdminPage = () => {
     onError: (error) => {
       toast({
         title: "Lỗi",
-        description: "Không thể cập nhật phần thưởng. Hãy thử lại.",
+        description: "Không thể cập nhật thông tin quả trứng. Hãy thử lại.",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Set egg broken state mutation
+  const { mutate: setEggBrokenState } = useMutation({
+    mutationFn: async (data: { eggId: number; broken: boolean }) => {
+      const response = await apiRequest("POST", "/api/admin/set-egg-broken", data);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      // Show success message
+      toast({
+        title: "Cập nhật thành công",
+        description: `Quả trứng #${data.id} đã ${data.broken ? 'được đánh dấu vỡ' : 'được đánh dấu chưa vỡ'}.`,
+      });
+      
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/eggs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/game-state"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Lỗi",
+        description: "Không thể cập nhật trạng thái quả trứng. Hãy thử lại.",
         variant: "destructive",
       });
     },
@@ -129,11 +169,27 @@ const AdminPage = () => {
       const response = await apiRequest("POST", "/api/admin/create-link", data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: LinkResponse) => {
       // Show success message
       toast({
         title: "Tạo link thành công",
         description: "Link mới đã được tạo.",
+      });
+      
+      // Generate QR code for the new link
+      let fullSubdomain = subdomain ? `${subdomain}.` : "";
+      const fullUrl = `${protocol}://${fullSubdomain}${data.domain}${data.path || ''}?linkId=${data.id}`;
+      
+      QRCode.toDataURL(fullUrl, { margin: 2 }, (err, url) => {
+        if (err) {
+          console.error('Error generating QR code:', err);
+          return;
+        }
+        
+        // Open QR code dialog
+        setQrCodeData(url);
+        setQrCodeURL(fullUrl);
+        setShowQRCode(true);
       });
       
       // Reset form
@@ -178,9 +234,10 @@ const AdminPage = () => {
   });
   
   // Handle edit egg
-  const handleEditEgg = (eggId: number, currentReward: number) => {
-    setEditingEgg(eggId);
-    setEggReward(currentReward);
+  const handleEditEgg = (egg: EggData) => {
+    setEditingEgg(egg.id);
+    setEggReward(String(egg.reward)); // Convert to string
+    setEggWinningRate(egg.winningRate);
   };
   
   // Handle save egg reward
@@ -190,6 +247,7 @@ const AdminPage = () => {
     updateEggReward({
       eggId: editingEgg,
       reward: eggReward,
+      winningRate: eggWinningRate
     });
   };
   
@@ -197,19 +255,12 @@ const AdminPage = () => {
   const handleCreateLink = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!subdomain) {
-      toast({
-        title: "Không hợp lệ",
-        description: "Bạn phải nhập tên miền phụ.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     createCustomLink({
       domain,
-      subdomain,
+      subdomain: subdomain || "",
       path,
+      eggId: 0, // Không chỉ định quả trứng cụ thể
+      protocol // Gửi protocol đã chọn
     });
   };
   
@@ -221,8 +272,51 @@ const AdminPage = () => {
   };
   
   // Format reward as string
-  const formatReward = (reward: number) => {
+  const formatReward = (reward: number | string) => {
+    if (typeof reward === 'string') {
+      return reward;
+    }
     return reward.toFixed(2);
+  };
+  
+  // Generate custom link options
+  const generateLinkOption = (link: LinkResponse) => {
+    let fullSubdomain = link.subdomain ? `${link.subdomain}.` : "";
+    return `${link.protocol || 'https'}://${fullSubdomain}${link.domain}${link.path || ''}?linkId=${link.id}`;
+  };
+  
+  // Hiển thị preview URL
+  const previewUrl = () => {
+    let fullSubdomain = subdomain ? `${subdomain}.` : "";
+    return `${protocol}://${fullSubdomain}${domain}${path || ''}`;
+  };
+  
+  // Generate QR code for an existing link
+  const generateQRCode = (link: LinkResponse) => {
+    let fullSubdomain = link.subdomain ? `${link.subdomain}.` : "";
+    const fullUrl = `${link.protocol || 'https'}://${fullSubdomain}${link.domain}${link.path || ''}?linkId=${link.id}`;
+    
+    QRCode.toDataURL(fullUrl, { margin: 2 }, (err, url) => {
+      if (err) {
+        console.error('Error generating QR code:', err);
+        return;
+      }
+      
+      // Open QR code dialog
+      setQrCodeData(url);
+      setQrCodeURL(fullUrl);
+      setShowQRCode(true);
+    });
+  };
+  
+  // Handle toggle egg broken state
+  const handleToggleEggBrokenState = (egg: EggData) => {
+    if (confirm(`Bạn có chắc muốn ${egg.broken ? 'khôi phục' : 'đánh dấu vỡ'} quả trứng #${egg.id} không?`)) {
+      setEggBrokenState({
+        eggId: egg.id,
+        broken: !egg.broken
+      });
+    }
   };
   
   return (
@@ -248,54 +342,98 @@ const AdminPage = () => {
       <Tabs defaultValue="eggs">
         <TabsList className="mb-4">
           <TabsTrigger value="eggs">Cài đặt phần thưởng</TabsTrigger>
-          <TabsTrigger value="links">Quản lý links</TabsTrigger>
+          <TabsTrigger value="links">Quản lý link</TabsTrigger>
         </TabsList>
         
-        {/* Eggs tab */}
+        {/* Eggs tab content */}
         <TabsContent value="eggs">
           <Card>
             <CardHeader>
-              <CardTitle>Cài đặt phần thưởng cho các trứng vàng</CardTitle>
+              <CardTitle>Các quả trứng vàng</CardTitle>
               <CardDescription>
-                Điều chỉnh giá trị phần thưởng cho từng quả trứng
+                Điều chỉnh phần thưởng và tỉ lệ trúng thưởng cho từng quả trứng vàng.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {eggsLoading ? (
-                <div className="flex justify-center py-4">Đang tải...</div>
-              ) : (
                 <Table>
-                  <TableCaption>Danh sách các quả trứng và phần thưởng</TableCaption>
+                <TableCaption>Danh sách quả trứng vàng</TableCaption>
                   <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[80px]">ID</TableHead>
+                    <TableHead className="w-[120px]">Phần thưởng</TableHead>
+                    <TableHead>Tỉ lệ trúng thưởng</TableHead>
+                    <TableHead>Trạng thái</TableHead>
+                    <TableHead className="text-right">Thao tác</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {eggsLoading ? (
                     <TableRow>
-                      <TableHead>Quả trứng</TableHead>
-                      <TableHead>Giá trị phần thưởng</TableHead>
-                      <TableHead>Trạng thái</TableHead>
-                      <TableHead className="text-right">Hành động</TableHead>
+                      <TableCell colSpan={5} className="text-center">Đang tải...</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {Array.isArray(eggs) && eggs.map((egg: any) => (
+                  ) : (
+                    eggs.map((egg) => (
                       <TableRow key={egg.id}>
-                        <TableCell>Trứng #{egg.id}</TableCell>
+                        <TableCell className="font-medium">Trứng #{egg.id}</TableCell>
                         <TableCell>
                           {editingEgg === egg.id ? (
                             <Input
-                              type="number"
+                              type="text"
                               value={eggReward}
-                              onChange={(e) => setEggReward(Number(e.target.value))}
+                              onChange={(e) => setEggReward(e.target.value)}
                               className="w-32"
+                              placeholder="Nhập phần thưởng"
                             />
                           ) : (
                             formatReward(egg.reward)
                           )}
                         </TableCell>
-                        <TableCell>{egg.broken ? "Đã vỡ" : "Còn nguyên"}</TableCell>
+                        <TableCell>
+                          {editingEgg === egg.id ? (
+                            <div className="flex items-center space-x-2">
+                              <Slider
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={[eggWinningRate]}
+                                onValueChange={(values) => setEggWinningRate(values[0])}
+                                className="w-32"
+                              />
+                              <Input
+                                type="number"
+                                min={0}
+                                max={100}
+                                value={eggWinningRate}
+                                onChange={(e) => setEggWinningRate(Number(e.target.value))}
+                                className="w-16"
+                              />
+                              <span>%</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center">
+                              <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2">
+                                <div 
+                                  className={`h-2.5 rounded-full ${
+                                    egg.winningRate > 80 ? 'bg-green-500' : 
+                                    egg.winningRate > 40 ? 'bg-yellow-500' : 
+                                    'bg-red-500'
+                                  }`}
+                                  style={{ width: `${egg.winningRate}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-sm">{egg.winningRate}%</span>
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className={`px-2 py-1 text-xs rounded-full ${egg.broken ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                            {egg.broken ? 'Đã vỡ' : 'Chưa vỡ'}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-right">
                           {editingEgg === egg.id ? (
-                            <div className="flex justify-end gap-2">
+                            <div className="flex justify-end space-x-2">
                               <Button 
-                                variant="default" 
                                 size="sm"
                                 onClick={handleSaveEggReward}
                               >
@@ -310,297 +448,197 @@ const AdminPage = () => {
                               </Button>
                             </div>
                           ) : (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleEditEgg(egg.id, egg.reward)}
-                            >
-                              Sửa
-                            </Button>
+                            <div className="flex justify-end space-x-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleEditEgg(egg)}
+                              >
+                                Sửa
+                              </Button>
+                              <Button 
+                                variant={egg.broken ? "destructive" : "default"}
+                                size="sm"
+                                onClick={() => handleToggleEggBrokenState(egg)}
+                              >
+                                {egg.broken ? 'Khôi phục' : 'Đánh dấu vỡ'}
+                              </Button>
+                            </div>
                           )}
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ))
+                  )}
                   </TableBody>
                 </Table>
-              )}
+              
             </CardContent>
           </Card>
         </TabsContent>
         
-        {/* Links tab */}
+        {/* Links tab content */}
         <TabsContent value="links">
-          <div className="grid gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Create link form */}
             <Card>
               <CardHeader>
-                <CardTitle>Xuất bản Landing Page</CardTitle>
+                <CardTitle>Tạo link mới</CardTitle>
                 <CardDescription>
-                  Tên miền riêng
+                  Tạo link truy cập cho người dùng.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleCreateLink} className="space-y-4">
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Giao thức</Label>
+                    <RadioGroup 
+                      defaultValue="https" 
+                      value={protocol}
+                      onValueChange={setProtocol}
+                      className="flex space-x-4"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="http" id="http" />
+                        <Label htmlFor="http">HTTP</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="https" id="https" />
+                        <Label htmlFor="https">HTTPS</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                  
                       <div className="space-y-2">
-                        <Label htmlFor="subdomain">Tên miền phụ</Label>
+                    <Label htmlFor="subdomain">Tên miền phụ (không bắt buộc)</Label>
                         <Input
                           id="subdomain"
-                          placeholder="ten-mien-phu"
                           value={subdomain}
                           onChange={(e) => setSubdomain(e.target.value)}
-                          required
+                      placeholder="vd: player123"
                         />
                       </div>
+                  
                       <div className="space-y-2">
-                        <Label htmlFor="domain">Tên miền chính</Label>
+                    <Label htmlFor="domain">Tên miền</Label>
                         <Input
                           id="domain"
                           value={domain}
                           onChange={(e) => setDomain(e.target.value)}
+                      required
                         />
                       </div>
+                  
                       <div className="space-y-2">
                         <Label htmlFor="path">Đường dẫn (không bắt buộc)</Label>
                         <Input
                           id="path"
-                          placeholder="/duong-dan"
                           value={path}
                           onChange={(e) => setPath(e.target.value)}
+                      placeholder="vd: /game"
                         />
                       </div>
+                  
+                  <div className="p-2 border rounded-md bg-gray-50">
+                    <p className="text-sm text-gray-700">Preview: {previewUrl()}</p>
                     </div>
 
-                    <div className="flex justify-between items-center">
-                      <div className="text-sm text-gray-500">
-                        Preview: https://{subdomain}.{domain}{path}
-                      </div>
-                      <div>
-                        <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">Xuất bản</Button>
-                      </div>
-                    </div>
-                  </div>
+                  
+                  
+                  <Button type="submit" className="w-full">
+                    Tạo link
+                  </Button>
                 </form>
               </CardContent>
             </Card>
             
-            {/* Links list with success notification */}
+            {/* Links list */}
             <Card>
               <CardHeader>
-                <CardTitle>Danh sách links</CardTitle>
+                <CardTitle>Danh sách link</CardTitle>
                 <CardDescription>
-                  Quản lý các link đã tạo
+                  Quản lý các link đã tạo.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                {/* Success message when link created */}
-                {Array.isArray(links) && links.length > 0 && (
-                  <div className="mb-6 border border-green-200 bg-green-50 rounded-md p-4">
-                    <div className="flex items-center mb-2">
-                      <div className="mr-2 flex-shrink-0 h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
-                        <svg className="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <h3 className="text-lg font-semibold text-green-800">Mừng quá, xuất bản thành công rồi!</h3>
-                    </div>
-                    
-                    <div className="mt-3 bg-white p-3 rounded-md border border-gray-200">
-                      <div className="text-sm font-medium text-gray-600 mb-1">Trang của bạn</div>
-                      <div className="flex items-center justify-between">
-                        <a 
-                          href={links[links.length-1].fullUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline text-sm"
-                        >
-                          {links[links.length-1].fullUrl}
-                        </a>
-                        <div className="flex space-x-2">
-                          <button 
-                            className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md" 
-                            onClick={() => {
-                              navigator.clipboard.writeText(links[links.length-1].fullUrl);
-                              toast({
-                                title: "Đã sao chép!",
-                                description: "Link đã được sao chép vào clipboard",
-                              });
-                            }}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" />
-                            </svg>
-                          </button>
-                          <button 
-                            className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md"
-                            onClick={() => {
-                              setQrCodeURL(links[links.length-1].fullUrl);
-                              
-                              // Generate QR code
-                              QRCode.toDataURL(links[links.length-1].fullUrl, { width: 300 })
-                                .then((url) => {
-                                  setQrCodeData(url);
-                                  setShowQRCode(true);
-                                })
-                                .catch((err) => {
-                                  console.error(err);
-                                  toast({
-                                    title: "Lỗi!",
-                                    description: "Không thể tạo mã QR code",
-                                    variant: "destructive",
-                                  });
-                                });
-                            }}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                            </svg>
-                          </button>
-                          <button 
-                            className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-md"
-                            onClick={() => {
-                              window.open(links[links.length-1].fullUrl, '_blank');
-                            }}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-4 text-center">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="bg-indigo-600 text-white border-0 hover:bg-indigo-700"
-                        onClick={() => {
-                          // Set values from the last link
-                          setSubdomain(links[links.length-1].subdomain);
-                          setDomain(links[links.length-1].domain);
-                          setPath(links[links.length-1].path);
-                          
-                          // Republish link using handleCreateLink
-                          toast({
-                            title: "Đang xuất bản lại...",
-                            description: "Đang tạo lại trang web của bạn"
-                          });
-                        }}
-                      >
-                        Xuất bản lại
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              
-                {linksLoading ? (
-                  <div className="flex justify-center py-4">Đang tải...</div>
-                ) : (
+              <CardContent className="max-h-[400px] overflow-y-auto">
                   <Table>
-                    <TableCaption>Danh sách các link tùy chỉnh</TableCaption>
+                  <TableCaption>Danh sách link</TableCaption>
                     <TableHeader>
+                    <TableRow>
+                      <TableHead>URL</TableHead>
+                      <TableHead>Trạng thái</TableHead>
+                      <TableHead className="text-right">Thao tác</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {linksLoading ? (
                       <TableRow>
-                        <TableHead>Link đầy đủ</TableHead>
-                        <TableHead>Trạng thái</TableHead>
-                        <TableHead>Ngày tạo</TableHead>
-                        <TableHead className="text-right">Hành động</TableHead>
+                        <TableCell colSpan={3} className="text-center">Đang tải...</TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {Array.isArray(links) && links.map((link: LinkResponse) => (
+                    ) : links.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center">Chưa có link nào.</TableCell>
+                      </TableRow>
+                    ) : (
+                      links.map((link) => (
                         <TableRow key={link.id}>
-                          <TableCell className="font-medium">
+                          <TableCell>
+                            <div className="text-xs truncate max-w-[120px]">
                             <a 
-                              href={link.fullUrl} 
+                                href={generateLinkOption(link)}
                               target="_blank" 
                               rel="noopener noreferrer"
                               className="text-blue-600 hover:underline"
+                                title={generateLinkOption(link)}
                             >
-                              {link.fullUrl}
+                                {link.subdomain ? link.subdomain : link.domain}
                             </a>
+                            </div>
                           </TableCell>
                           <TableCell>
-                            {link.active ? (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                Hoạt động
+                            <span className={`px-2 py-1 text-xs rounded-full ${link.used ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                              {link.used ? 'Đã dùng' : 'Chưa dùng'}
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                Không hoạt động
-                              </span>
-                            )}
                           </TableCell>
-                          <TableCell>
-                            {new Date(link.createdAt).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell className="text-right space-x-2">
+                          <TableCell className="text-right">
+                            <div className="flex justify-end space-x-2">
                             <Button 
                               variant="outline" 
                               size="sm"
-                              className="mr-2"
-                              onClick={() => {
-                                // Copy link
-                                navigator.clipboard.writeText(link.fullUrl);
-                                toast({
-                                  title: "Đã sao chép!",
-                                  description: "Link đã được sao chép vào clipboard",
-                                });
-                              }}
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" />
-                              </svg>
+                                onClick={() => generateQRCode(link)}
+                                title="Tạo QR Code"
+                              >
+                                QR
                             </Button>
                             <Button 
                               variant="outline" 
                               size="sm"
-                              className="mr-2"
                               onClick={() => {
-                                setQrCodeURL(link.fullUrl);
-                                
-                                // Generate QR code
-                                QRCode.toDataURL(link.fullUrl, { width: 300 })
-                                  .then((url) => {
-                                    setQrCodeData(url);
-                                    setShowQRCode(true);
-                                  })
-                                  .catch((err) => {
-                                    console.error(err);
+                                  // Copy link to clipboard
+                                  navigator.clipboard.writeText(generateLinkOption(link));
                                     toast({
-                                      title: "Lỗi!",
-                                      description: "Không thể tạo mã QR code",
-                                      variant: "destructive",
-                                    });
+                                    title: "Đã sao chép",
+                                    description: "Link đã được sao chép vào clipboard.",
                                   });
                               }}
+                                title="Sao chép link"
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                              </svg>
+                                URL
                             </Button>
                             <Button 
                               variant="destructive" 
                               size="sm"
                               onClick={() => handleDeleteLink(link.id)}
+                                title="Xóa link"
                             >
                               Xóa
                             </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
-                      ))}
-                      
-                      {(!Array.isArray(links) || links.length === 0) && (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center py-8">
-                            Chưa có link nào được tạo
-                          </TableCell>
-                        </TableRow>
+                      ))
                       )}
                     </TableBody>
                   </Table>
-                )}
               </CardContent>
             </Card>
           </div>

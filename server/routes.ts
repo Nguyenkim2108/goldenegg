@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { UpdateEggRequest, CreateLinkRequest } from "@shared/schema";
+import { UpdateEggRequest, CreateLinkRequest, BreakEggByLinkRequest, SetEggBrokenStateRequest } from "@shared/schema";
 
 // Auth middleware
 const requireAuth = (req: Request, res: Response, next: NextFunction) => {
@@ -21,10 +21,12 @@ const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
 export async function registerRoutes(app: Express): Promise<Server> {
   // ----------- Public Routes -----------
   
-  // Game state endpoint
+  // Game state endpoint - thêm tham số linkId
   app.get("/api/game-state", async (req, res) => {
     try {
-      const gameState = await storage.getGameState();
+      // Nhận linkId từ query parameter
+      const linkId = req.query.linkId ? parseInt(req.query.linkId as string, 10) : undefined;
+      const gameState = await storage.getGameState(linkId);
       res.json(gameState);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to get game state";
@@ -32,23 +34,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Leaderboard endpoint
-  app.get("/api/leaderboard", async (req, res) => {
-    try {
-      const leaderboard = await storage.getLeaderboard();
-      res.json(leaderboard);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to get leaderboard";
-      res.status(500).json({ message });
-    }
-  });
-  
-  // Break egg endpoint
+  // Break egg endpoint - thêm tham số linkId
   app.post("/api/break-egg", async (req, res) => {
     try {
       // Validate request body
       const schema = z.object({
-        eggId: z.number().int().min(1).max(9),
+        eggId: z.number().int().min(1).max(8), // Cập nhật từ 9 xuống 8
+        linkId: z.number().int().optional()
       });
       
       const result = schema.safeParse(req.body);
@@ -56,10 +48,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid egg ID" });
       }
       
-      const { eggId } = result.data;
+      const { eggId, linkId } = result.data;
       
       // Process egg break
-      const breakResult = await storage.breakEgg(eggId);
+      const breakResult = await storage.breakEgg(eggId, linkId);
+
+      // Nếu có linkId, tiết lộ tất cả các quả trứng khác
+      if (linkId) {
+        const revealResult = await storage.revealAllEggs(linkId, eggId, breakResult.reward);
+        return res.json(revealResult);
+      }
+
       res.json(breakResult);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to break egg";
@@ -141,24 +140,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update egg reward (admin only)
   app.post("/api/admin/update-egg", requireAdmin, async (req, res) => {
     try {
+      console.log("Received update-egg request:", req.body);
+
       // Validate request body
       const schema = z.object({
-        eggId: z.number().int().min(1).max(9),
-        reward: z.number().positive(),
-      }) satisfies z.ZodType<UpdateEggRequest>;
+        eggId: z.number().int().min(1).max(8), // Cập nhật từ 9 xuống 8
+        reward: z.union([z.number().min(0), z.string().min(1)]), // Cho phép cả số và string (string tối thiểu 1 ký tự)
+        winningRate: z.number().min(0).max(100)
+      });
+
+      const result = schema.safeParse(req.body);
+      if (!result.success) {
+        console.error("Validation error:", result.error);
+        console.error("Request body:", req.body);
+        return res.status(400).json({
+          message: "Invalid request",
+          details: result.error.format()
+        });
+      }
+      
+      const { eggId, reward, winningRate } = result.data;
+      
+      // Update egg reward and winning rate
+      const updatedEgg = await storage.updateEggReward(eggId, reward, winningRate);
+      res.json(updatedEgg);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update egg";
+      res.status(500).json({ message });
+    }
+  });
+  
+  // Set egg broken state (admin only)
+  app.post("/api/admin/set-egg-broken", requireAdmin, async (req, res) => {
+    try {
+      // Validate request body
+      const schema = z.object({
+        eggId: z.number().int().min(1).max(8), // Cập nhật từ 9 xuống 8
+        broken: z.boolean()
+      });
       
       const result = schema.safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({ message: "Invalid request" });
       }
       
-      const { eggId, reward } = result.data;
+      const { eggId, broken } = result.data;
       
-      // Update egg reward
-      const updatedEgg = await storage.updateEggReward(eggId, reward);
+      // Update egg broken state
+      const updatedEgg = await storage.setEggBrokenState(eggId, broken);
       res.json(updatedEgg);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to update egg";
+      const message = error instanceof Error ? error.message : "Failed to update egg state";
       res.status(500).json({ message });
     }
   });
@@ -174,25 +206,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Create custom link (admin only)
+  // Create custom link (admin only) - cập nhật để không cần reward
   app.post("/api/admin/create-link", requireAdmin, async (req, res) => {
     try {
+      console.log("Received create-link request:", req.body);
+      
       // Validate request body
       const schema = z.object({
         domain: z.string().min(1),
-        subdomain: z.string().min(1),
-        path: z.string().optional(),
-      }) satisfies z.ZodType<CreateLinkRequest>;
+        subdomain: z.string().optional().default(""),
+        path: z.string().optional().default(""),
+        eggId: z.number().int().min(0).max(9).optional().default(0),
+        protocol: z.string().optional().default("https")
+      });
       
       const result = schema.safeParse(req.body);
       if (!result.success) {
-        return res.status(400).json({ message: "Invalid request" });
+        console.error("Validation error:", result.error);
+        return res.status(400).json({ 
+          message: "Invalid request", 
+          details: result.error.format() 
+        });
       }
       
+      const linkData: CreateLinkRequest = {
+        domain: result.data.domain,
+        subdomain: result.data.subdomain || "",
+        path: result.data.path || "",
+        eggId: result.data.eggId || 0,
+        protocol: result.data.protocol || "https"
+      };
+      
+      console.log("Validated link data:", linkData);
+      
       // Create custom link
-      const link = await storage.createCustomLink(result.data);
+      const link = await storage.createCustomLink(linkData);
+      console.log("Link created successfully:", link);
       res.json(link);
     } catch (error) {
+      console.error("Error creating link:", error);
       const message = error instanceof Error ? error.message : "Failed to create link";
       res.status(500).json({ message });
     }
@@ -220,6 +272,5 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  const httpServer = createServer(app);
-  return httpServer;
+  return createServer(app);
 }

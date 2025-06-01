@@ -2,10 +2,9 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { GameState, LeaderboardEntry } from "@shared/schema";
+import { GameState, RevealAllEggsResult } from "@shared/schema";
 import CountdownTimer from "@/components/CountdownTimer";
 import EggGrid from "@/components/EggGrid";
-import LeaderboardSection from "@/components/LeaderboardSection";
 import RewardNotification from "@/components/RewardNotification";
 
 const Game = () => {
@@ -14,25 +13,62 @@ const Game = () => {
   const [currentReward, setCurrentReward] = useState<number>(0);
   const [progress, setProgress] = useState(0);
   const [brokenEggs, setBrokenEggs] = useState<number[]>([]);
-  const [eggRewards, setEggRewards] = useState<{[key: number]: number}>({});
+  const [eggRewards, setEggRewards] = useState<{[key: number]: number | string}>({});
+  const [allEggsRevealed, setAllEggsRevealed] = useState(false);
+  
+  // Lấy linkId từ query params nếu có
+  const urlSearchParams = new URLSearchParams(window.location.search);
+  const linkId = parseInt(urlSearchParams.get('linkId') || '0', 10);
 
-  // Fetch game state from server
+  // Fetch game state from server with linkId
   const { data: gameData, isLoading: gameLoading } = useQuery<GameState>({
-    queryKey: ["/api/game-state"],
-  });
-
-  // Fetch leaderboard
-  const { data: leaderboard, isLoading: leaderboardLoading } = useQuery<LeaderboardEntry[]>({
-    queryKey: ["/api/leaderboard"],
+    queryKey: ["/api/game-state", linkId],
+    queryFn: async () => {
+      const response = await fetch(`/api/game-state${linkId ? `?linkId=${linkId}` : ''}`);
+      return response.json();
+    }
   });
 
   // Break egg mutation
   const { mutate: breakEgg } = useMutation({
     mutationFn: async (eggId: number) => {
-      const response = await apiRequest("POST", "/api/break-egg", { eggId });
+      // Gửi kèm linkId nếu có
+      const response = await apiRequest("POST", "/api/break-egg", { 
+        eggId, 
+        linkId: linkId || undefined 
+      });
       return response.json();
     },
     onSuccess: (data) => {
+      console.log("🎯 Break egg API response:", data);
+
+      if (data.eggs) {
+        // Case: Trả về là RevealAllEggsResult - khi đập trứng với link
+        const revealData = data as RevealAllEggsResult;
+        console.log("🎯 Processing RevealAllEggsResult:", revealData);
+
+        // Lưu thông tin trứng được đập
+        setBrokenEggs([revealData.brokenEggId]);
+        console.log("🥚 Setting brokenEggs:", [revealData.brokenEggId]);
+
+        // Lưu phần thưởng của tất cả các quả trứng
+        const rewardsMap: {[key: number]: number | string} = {};
+        revealData.eggs.forEach(egg => {
+          rewardsMap[egg.id] = egg.reward;
+        });
+        console.log("🎁 Setting eggRewards:", rewardsMap);
+        setEggRewards(rewardsMap);
+
+        // Đánh dấu tất cả trứng đã được tiết lộ
+        console.log("🔓 Setting allEggsRevealed to true");
+        setAllEggsRevealed(true);
+
+        // Hiển thị phần thưởng cho quả trứng được đập
+        console.log("💰 Setting currentReward:", revealData.reward);
+        setCurrentReward(revealData.reward);
+        setShowReward(true);
+      } else {
+        // Case: Trả về là BreakEggResult - khi đập trứng thông thường
       // Update broken eggs
       setBrokenEggs((prev) => [...prev, data.eggId]);
       
@@ -49,14 +85,14 @@ const Game = () => {
       // Update progress
       const newProgress = (brokenEggs.length + 1) / 9 * 100;
       setProgress(newProgress);
+      }
       
       // Invalidate queries
-      queryClient.invalidateQueries({ queryKey: ["/api/game-state"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/game-state", linkId] });
     },
   });
 
-  // Claim rewards mutation
+  // Claim rewards mutation (không cần trong chế độ link)
   const { mutate: claimRewards } = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/claim-rewards", {});
@@ -67,22 +103,48 @@ const Game = () => {
       setBrokenEggs([]);
       setProgress(0);
       setEggRewards({});
+      setAllEggsRevealed(false);
       
       // Invalidate queries
-      queryClient.invalidateQueries({ queryKey: ["/api/game-state"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/game-state", linkId] });
     },
   });
 
   // Handle egg click
   const handleEggClick = (eggId: number) => {
-    if (!brokenEggs.includes(eggId)) {
+    // Nếu đã đập một quả trứng trong chế độ link, không cho phép đập thêm
+    if (allEggsRevealed && linkId) {
+      alert("Bạn chỉ được đập một quả trứng duy nhất. Vui lòng sử dụng link khác để đập trứng khác.");
+      return;
+    }
+    
+    // Kiểm tra xem có đang sử dụng link
+    if (linkId) {
+      // Kiểm tra xem link đã được sử dụng chưa
+      if (gameData?.linkUsed) {
+        alert("Link này đã được sử dụng. Vui lòng sử dụng link khác.");
+        return;
+      }
+      
+      // Cho phép đập bất kỳ quả trứng nào khi sử dụng link
+      // Không cần kiểm tra quả trứng được phép đập nữa
       breakEgg(eggId);
+    } else {
+      // Chế độ thông thường
+      if (!brokenEggs.includes(eggId)) {
+        breakEgg(eggId);
+      }
     }
   };
 
-  // Handle claim button click - Break random egg
+  // Handle claim button click - Break random egg or claim rewards
   const handleClaimClick = () => {
+    if (linkId) {
+      // Trong chế độ link, nút này chỉ dùng để refresh
+      window.location.reload();
+      return;
+    }
+    
     // Get available (non-broken) eggs
     const availableEggs = Array.from({ length: 9 }, (_, i) => i + 1)
       .filter(id => !brokenEggs.includes(id));
@@ -106,35 +168,54 @@ const Game = () => {
   
   // Update UI when game state changes
   useEffect(() => {
-    if (gameData && gameData.brokenEggs) {
-      setBrokenEggs(gameData.brokenEggs);
+    if (gameData) {
+      setBrokenEggs(gameData.brokenEggs || []);
       setProgress(gameData.progress || 0);
+
+      // Xử lý trạng thái link đã sử dụng
+      if (gameData.linkId && gameData.linkUsed) {
+        setAllEggsRevealed(true);
+
+        // Nếu link đã được sử dụng, lấy thông tin tất cả các quả trứng
+        if (gameData.eggs && gameData.eggs.length > 0) {
+          const rewards: {[key: number]: number | string} = {};
+          gameData.eggs.forEach(egg => {
+            rewards[egg.id] = egg.reward;
+          });
+          setEggRewards(rewards);
+        }
+      }
     }
-  }, [gameData]);
+  }, [gameData, linkId]);
   
   // Game background
   const gameBackground = "bg-gradient-to-b from-blue-900 to-blue-950";
 
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-center bg-[hsl(var(--blue-dark))]">
-      {/* Main Game Area */}
-      <div 
-        className="relative w-full max-w-md mx-auto h-screen overflow-y-auto"
+    <div className="relative min-h-screen bg-[hsl(var(--blue-dark))] overflow-y-auto"
         style={{ 
           scrollbarWidth: 'thin',
           scrollbarColor: 'rgba(255, 215, 0, 0.5) rgba(0, 0, 128, 0.2)'
-        }}
-      >
+      }}>
         <div className={`${gameBackground} fixed inset-0 opacity-40`}></div>
         
-        <div className="relative min-h-screen flex flex-col p-4 z-10">
+      <div className="relative max-w-md mx-auto min-h-screen flex flex-col p-4 z-10">
           {/* Game Title */}
           <div className="text-center mb-2 mt-4">
-            <div className="inline-block px-4 py-0.5 bg-[hsl(var(--gold-primary))]/20 rounded-lg">
-              <span className="text-[hsl(var(--gold-primary))] text-xs font-medium">BẤM VÀO TRỨNG VÀNG</span>
-            </div>
+            
             <h1 className="text-white font-bold text-xl mt-1">ĐẬP VỠ TRỨNG VÀNG</h1>
           </div>
+        
+        {/* Link Info - hiển thị khi sử dụng link */}
+        {linkId > 0 && (
+          <div className="mb-3 p-2 bg-[hsl(var(--red-primary))]/20 rounded-lg text-center">
+            <span className="text-white text-sm">
+              {gameData?.linkUsed || allEggsRevealed
+                ? "Link này đã được sử dụng. Chỉ có thể xem phần thưởng." 
+                : `Bạn chỉ được đập 1 quả trứng duy nhất.`}
+            </span>
+          </div>
+        )}
           
           {/* Countdown Timer */}
           <CountdownTimer deadline={deadline} />
@@ -143,20 +224,25 @@ const Game = () => {
           <EggGrid 
             brokenEggs={brokenEggs} 
             onEggClick={handleEggClick} 
+          eggRewards={eggRewards}
+          allEggsRevealed={allEggsRevealed}
+          allowedEggId={undefined} // Không cần đánh dấu quả trứng nào được phép đập nữa
           />
           
-          {/* Claim Button And Progress Bar */}
+        {/* Claim/Reset Button And Progress Bar */}
           <div className="mt-auto mb-2">
-            {/* Claim button */}
+          {/* Claim button - đổi thành "Thử lại" khi sử dụng link */}
             <motion.button 
               className="w-full bg-gradient-to-r from-[hsl(var(--gold-secondary))] to-[hsl(var(--gold-primary))] text-white font-bold py-2.5 rounded-lg shadow-md mb-3"
               whileTap={{ scale: 0.95 }}
               onClick={handleClaimClick}
             >
-              Nhận ngay
+            {linkId ? "Thử lại" : "Nhận ngay"}
             </motion.button>
             
-            {/* Progress bar */}
+          {/* Progress bar - chỉ hiển thị khi không sử dụng link */}
+          {!linkId && (
+            <>
             <div className="relative h-2 bg-gray-300 rounded-full mb-2 overflow-hidden">
               <motion.div 
                 className="absolute left-0 top-0 h-full bg-[hsl(var(--gold-primary))] rounded-full"
@@ -170,16 +256,9 @@ const Game = () => {
             <div className="text-right text-xs text-white/80 mb-2">
               <span>{progress.toFixed(2)}%</span>
             </div>
+            </>
+          )}
           </div>
-          
-          {/* Leaderboard Section */}
-          <LeaderboardSection leaderboard={leaderboard || []} isLoading={leaderboardLoading} />
-          
-          {/* Admin link */}
-          <div className="mt-4 mb-10 text-center opacity-20 hover:opacity-80 transition-opacity">
-            <a href="/admin" className="text-xs text-white/60">Admin</a>
-          </div>
-        </div>
       </div>
       
       {/* Reward Notification */}

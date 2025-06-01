@@ -55,6 +55,10 @@ export const customLinks = pgTable("custom_links", {
   subdomain: text("subdomain").notNull().unique(),
   path: text("path").default(""),
   active: boolean("active").default(true).notNull(),
+  eggId: integer("egg_id").default(0).notNull(),
+  reward: integer("reward").default(0).notNull(),
+  used: boolean("used").default(false).notNull(),
+  protocol: text("protocol").default("https").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -63,6 +67,9 @@ export const insertCustomLinkSchema = createInsertSchema(customLinks).pick({
   domain: true,
   subdomain: true,
   path: true,
+  eggId: true,
+  reward: true,
+  protocol: true,
 });
 
 // Export types
@@ -84,31 +91,32 @@ export interface GameState {
   brokenEggs: number[];
   progress: number;
   eggs?: EggData[];
+  allowedEggId?: number;
+  linkId?: number;
+  linkUsed?: boolean;
 }
 
 export interface EggData {
   id: number;
   broken: boolean;
-  reward: number;
-}
-
-// Leaderboard entry type
-export interface LeaderboardEntry {
-  id: number;
-  username: string;
-  score: number;
+  reward: number | string; // Cho phép cả số và text
+  winningRate: number;
+  allowed?: boolean;
 }
 
 // Admin request/response types
 export interface UpdateEggRequest {
   eggId: number;
-  reward: number;
+  reward: number | string; // Cho phép cả số và text
+  winningRate: number;
 }
 
 export interface CreateLinkRequest {
   domain: string;
   subdomain: string;
   path?: string;
+  eggId: number;
+  protocol?: string;
 }
 
 export interface LinkResponse {
@@ -118,5 +126,34 @@ export interface LinkResponse {
   domain: string;
   path: string | "";
   active: boolean;
+  eggId: number;
+  reward: number | string; // Cho phép cả số và text
+  used: boolean;
+  protocol: string;
   createdAt: string;
+}
+
+// Thêm các interface mới
+export interface GameLinkInfo {
+  linkId: number;
+  eggId: number;
+  reward: number;
+  used: boolean;
+}
+
+export interface BreakEggByLinkRequest {
+  linkId: number;
+  eggId: number;
+}
+
+export interface SetEggBrokenStateRequest {
+  eggId: number;
+  broken: boolean;
+}
+
+export interface RevealAllEggsResult {
+  eggs: EggData[];
+  brokenEggId: number;
+  reward: number;
+  success: boolean;
 }
