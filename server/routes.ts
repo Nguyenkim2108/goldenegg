@@ -19,6 +19,53 @@ const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // ----------- Test Routes -----------
+
+  // Simple test endpoint
+  app.get("/api/test", async (req, res) => {
+    try {
+      res.json({
+        message: "API is working!",
+        timestamp: new Date().toISOString(),
+        success: true
+      });
+    } catch (error) {
+      console.error("Test endpoint error:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ message: "Test failed", error: message });
+    }
+  });
+
+  // Storage test endpoint
+  app.get("/api/test-storage", async (req, res) => {
+    try {
+      console.log("🧪 Testing storage...");
+      console.log("Storage object:", typeof storage);
+
+      // Test basic storage methods
+      const eggs = await storage.getAllEggs();
+      console.log("✅ getAllEggs works, count:", eggs.length);
+
+      const links = await storage.getCustomLinks();
+      console.log("✅ getCustomLinks works, count:", links.length);
+
+      res.json({
+        message: "Storage test successful!",
+        eggsCount: eggs.length,
+        linksCount: links.length,
+        success: true
+      });
+    } catch (error) {
+      console.error("❌ Storage test error:", error);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({
+        message: "Storage test failed",
+        error: message,
+        stack: error instanceof Error ? error.stack : String(error)
+      });
+    }
+  });
+
   // ----------- Public Routes -----------
   
   // Game state endpoint - thêm tham số linkId
@@ -129,11 +176,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all eggs (admin only)
   app.get("/api/admin/eggs", requireAdmin, async (req, res) => {
     try {
+      console.log("🥚 Admin eggs endpoint called");
       const eggs = await storage.getAllEggs();
+      console.log("🥚 Eggs retrieved:", eggs.length, "eggs");
       res.json(eggs);
     } catch (error) {
+      console.error("❌ Admin eggs error:", error);
       const message = error instanceof Error ? error.message : "Failed to get eggs";
-      res.status(500).json({ message });
+      res.status(500).json({ message, error: error instanceof Error ? error.stack : String(error) });
     }
   });
   
@@ -198,11 +248,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all custom links (admin only)
   app.get("/api/admin/links", requireAdmin, async (req, res) => {
     try {
+      console.log("🔗 Admin links endpoint called");
       const links = await storage.getCustomLinks();
+      console.log("🔗 Links retrieved:", links.length, "links");
       res.json(links);
     } catch (error) {
+      console.error("❌ Admin links error:", error);
       const message = error instanceof Error ? error.message : "Failed to get links";
-      res.status(500).json({ message });
+      res.status(500).json({ message, error: error instanceof Error ? error.stack : String(error) });
     }
   });
   
