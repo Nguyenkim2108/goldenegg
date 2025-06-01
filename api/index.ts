@@ -1,6 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "../server/routes";
-import { log } from "../server/vite";
+
+// Simple log function for Vercel
+const log = (message: string) => {
+  console.log(`[${new Date().toISOString()}] ${message}`);
+};
 
 const app = express();
 app.use(express.json());
