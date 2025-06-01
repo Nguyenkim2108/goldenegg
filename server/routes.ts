@@ -1,5 +1,4 @@
 import type { Express, Request, Response, NextFunction } from "express";
-import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import { UpdateEggRequest, CreateLinkRequest, BreakEggByLinkRequest, SetEggBrokenStateRequest } from "../shared/types";
@@ -18,7 +17,7 @@ const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export function registerRoutes(app: Express): void {
   // ----------- Test Routes -----------
 
   // Simple test endpoint
@@ -324,6 +323,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message });
     }
   });
-
-  return createServer(app);
 }

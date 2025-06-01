@@ -53,8 +53,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize routes
-registerRoutes(app);
+// Initialize routes - don't await the server creation
+try {
+  registerRoutes(app);
+  console.log("Routes registered successfully");
+} catch (error) {
+  console.error("Failed to register routes:", error);
+}
 
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   const status = err.status || err.statusCode || 500;
