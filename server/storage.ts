@@ -1,14 +1,17 @@
-import {
-  GameState,
-  User,
-  CustomLink,
-  UpdateEggRequest,
-  CreateLinkRequest,
+import { 
+  GameState, 
+  User, 
+  CustomLink, 
+  UpdateEggRequest, 
+  CreateLinkRequest, 
   LinkResponse,
   GameLinkInfo,
   RevealAllEggsResult,
-  EggData as SchemaEggData
-} from "../shared/types";
+  EggData as SchemaEggData 
+} from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
+import { users, customLinks } from "@shared/schema";
 
 // Constants for game logic
 const TOTAL_EGGS = 8; // Đồng bộ với frontend - chỉ hiển thị 8 quả trứng
@@ -16,6 +19,24 @@ const MIN_REWARD = 50;
 const MAX_REWARD = 500;
 const DEFAULT_DOMAIN = "dammedaga.fun";
 const DEFAULT_WINNING_RATE = 100; // Tỉ lệ mặc định 100%
+
+// Global win rate configuration
+interface GlobalWinRateConfig {
+  enabled: boolean;
+  globalWinRate: number; // Global win percentage (0-100)
+  useGroups: boolean; // Whether to use custom groups instead of global rate
+  winRateSystemEnabled: boolean; // NEW: Master toggle for win rate system (ON/OFF)
+  groups?: {
+    groupA: {
+      winRate: number; // Win rate for Group A (0-100)
+      eggIds: number[]; // Array of egg IDs assigned to Group A
+    };
+    groupB: {
+      winRate: number; // Win rate for Group B (0-100)
+      eggIds: number[]; // Array of egg IDs assigned to Group B
+    };
+  };
+}
 
 // Interface for egg data
 interface EggData {
@@ -48,7 +69,13 @@ interface AdminOperations {
   createCustomLink(linkData: CreateLinkRequest): Promise<LinkResponse>;
   getCustomLinks(): Promise<LinkResponse[]>;
   deleteCustomLink(id: number): Promise<boolean>;
-  setEggBrokenState(eggId: number, broken: boolean): Promise<EggData>; // Thêm phương thức mới
+  setEggBrokenState(eggId: number, broken: boolean): Promise<EggData>;
+
+  // Global win rate methods
+  getGlobalWinRateConfig(): Promise<GlobalWinRateConfig>;
+  updateGlobalWinRateConfig(config: Partial<GlobalWinRateConfig>): Promise<GlobalWinRateConfig>;
+  bulkUpdateEggWinRates(winningRate: number): Promise<EggData[]>;
+  bulkUpdateEggRewards(reward: number | string): Promise<EggData[]>;
 }
 
 // Extend storage interface with game methods
@@ -73,6 +100,24 @@ export class MemStorage implements IStorage {
   private deadline: number;
   private customLinks: Map<number, CustomLink>;
   currentId: number;
+
+  // Global win rate configuration
+  private globalWinRateConfig: GlobalWinRateConfig = {
+    enabled: false,
+    globalWinRate: 30, // Default 30% global win rate
+    useGroups: false,
+    winRateSystemEnabled: false, // NEW: Default to OFF (force predetermined results)
+    groups: {
+      groupA: {
+        winRate: 20, // Default 20% for Group A
+        eggIds: [1, 2, 3, 4] // Default assignment: eggs 1-4 to Group A
+      },
+      groupB: {
+        winRate: 80, // Default 80% for Group B
+        eggIds: [5, 6, 7, 8] // Default assignment: eggs 5-8 to Group B
+      }
+    }
+  };
 
   constructor() {
     this.users = new Map();
@@ -224,17 +269,45 @@ export class MemStorage implements IStorage {
       throw new Error(`Egg with ID ${eggId} is already broken`);
     }
     
-    // Xác định xem người chơi có trúng thưởng hay không dựa trên tỉ lệ của quả trứng này
-    const randomValue = Math.random() * 100;
-    const isWinner = randomValue < egg.winningRate;
+    // NEW: Configurable Win Rate System
+    let reward: number | string;
 
-    // Log để debug tỷ lệ trúng thưởng
-    console.log(`🎲 Egg #${eggId} - Random: ${randomValue.toFixed(2)}, WinningRate: ${egg.winningRate}%, IsWinner: ${isWinner}`);
+    if (this.globalWinRateConfig.winRateSystemEnabled) {
+      // Win rate system is ON - apply win rate calculations
+      let winRate = egg.winningRate; // Default to individual egg win rate
 
-    // Nếu người chơi không trúng, reward = 0
-    const reward = isWinner ? egg.reward : 0;
+      // Check if global win rate is enabled
+      if (this.globalWinRateConfig.enabled) {
+        if (this.globalWinRateConfig.useGroups && this.globalWinRateConfig.groups) {
+          // Use group-based win rates
+          const groupA = this.globalWinRateConfig.groups.groupA;
+          const groupB = this.globalWinRateConfig.groups.groupB;
 
-    console.log(`💰 Egg #${eggId} - Expected Reward: ${egg.reward}, Actual Reward: ${reward}`);
+          if (groupA.eggIds.includes(eggId)) {
+            winRate = groupA.winRate;
+          } else if (groupB.eggIds.includes(eggId)) {
+            winRate = groupB.winRate;
+          }
+        } else {
+          // Use global win rate
+          winRate = this.globalWinRateConfig.globalWinRate;
+        }
+      }
+
+      // Apply win rate calculation
+      const randomValue = Math.random() * 100;
+      if (randomValue <= winRate) {
+        reward = egg.reward; // Win - return configured reward
+        console.log(`🎯 Egg #${eggId} - WIN (${randomValue.toFixed(1)}% <= ${winRate}%) - Reward: ${reward}`);
+      } else {
+        reward = 0; // Lose - return no reward
+        console.log(`❌ Egg #${eggId} - LOSE (${randomValue.toFixed(1)}% > ${winRate}%) - No reward`);
+      }
+    } else {
+      // Win rate system is OFF - force predetermined results (always return configured reward)
+      reward = egg.reward;
+      console.log(`💰 Egg #${eggId} - Force predetermined result - Always returning configured reward: ${reward}`);
+    }
     
     // Mark egg as broken
     egg.broken = true;
@@ -251,7 +324,7 @@ export class MemStorage implements IStorage {
     // Return result
     return {
       eggId,
-      reward: reward, // Trả về phần thưởng thực tế (có thể là 0 nếu không trúng)
+      reward: reward, // Always return the configured reward (100% guaranteed)
       success: true,
     };
   }
@@ -269,29 +342,25 @@ export class MemStorage implements IStorage {
       throw new Error(`Egg with ID ${brokenEggId} does not exist`);
     }
 
-    // Sử dụng actualReward đã được tính toán từ breakEgg() thay vì tính lại
-    // Điều này đảm bảo tỷ lệ trúng thưởng chỉ được tính một lần duy nhất
+    // FORCE PREDETERMINED RESULTS: Always show configured rewards for all eggs
+    // Remove all win rate calculations and always display the exact configured reward
 
-    // Tiết lộ phần thưởng của tất cả các quả trứng
-    // Tính toán phần thưởng thực tế dựa trên tỷ lệ trúng thưởng
+    // Reveal all eggs with their configured rewards (no randomization)
     const allEggs = Array.from(this.eggs.values()).map(egg => {
-      // Nếu là quả đã chọn, sử dụng actualReward đã tính toán
+      // If this is the broken egg, use the actualReward that was already calculated
       if (egg.id === brokenEggId) {
         return {
           ...egg,
-          reward: actualReward, // Sử dụng reward thực tế đã tính toán
+          reward: actualReward, // Use the guaranteed reward from breakEgg()
           broken: true,
           allowed: true
         };
       }
 
-      // Các quả khác: tính toán phần thưởng dựa trên tỷ lệ trúng thưởng
-      // Để hiển thị chính xác những gì người chơi sẽ nhận được
-      const calculatedReward = egg.winningRate > 0 ? egg.reward : 0;
-
+      // For all other eggs: always show their configured reward (no win rate logic)
       return {
         ...egg,
-        reward: calculatedReward, // Hiển thị 0 nếu tỷ lệ trúng thưởng = 0%
+        reward: egg.reward, // Always show the configured reward (100% guaranteed)
         allowed: false
       };
     });
@@ -299,7 +368,7 @@ export class MemStorage implements IStorage {
     return {
       eggs: allEggs,
       brokenEggId,
-      reward: actualReward, // Sử dụng reward đã được tính toán chính xác từ breakEgg()
+      reward: actualReward, // Always return the guaranteed configured reward
       success: true
     };
   }
@@ -479,6 +548,103 @@ export class MemStorage implements IStorage {
 
   async deleteCustomLink(id: number): Promise<boolean> {
     return this.customLinks.delete(id);
+  }
+
+  // Global win rate management methods
+  async getGlobalWinRateConfig(): Promise<GlobalWinRateConfig> {
+    return { ...this.globalWinRateConfig };
+  }
+
+  async updateGlobalWinRateConfig(config: Partial<GlobalWinRateConfig>): Promise<GlobalWinRateConfig> {
+    // Validate config
+    if (config.globalWinRate !== undefined && (config.globalWinRate < 0 || config.globalWinRate > 100)) {
+      throw new Error("Global win rate must be between 0 and 100");
+    }
+
+    if (config.groups) {
+      if (config.groups.groupA.winRate < 0 || config.groups.groupA.winRate > 100) {
+        throw new Error("Group A win rate must be between 0 and 100");
+      }
+      if (config.groups.groupB.winRate < 0 || config.groups.groupB.winRate > 100) {
+        throw new Error("Group B win rate must be between 0 and 100");
+      }
+
+      // Validate egg IDs are within valid range
+      const invalidIdsA = config.groups.groupA.eggIds.filter(id => id < 1 || id > TOTAL_EGGS);
+      if (invalidIdsA.length > 0) {
+        throw new Error(`Invalid egg IDs in Group A: ${invalidIdsA.join(', ')}`);
+      }
+
+      const invalidIdsB = config.groups.groupB.eggIds.filter(id => id < 1 || id > TOTAL_EGGS);
+      if (invalidIdsB.length > 0) {
+        throw new Error(`Invalid egg IDs in Group B: ${invalidIdsB.join(', ')}`);
+      }
+
+      // Check for duplicate egg IDs between groups
+      const duplicateIds = config.groups.groupA.eggIds.filter(id =>
+        config.groups!.groupB.eggIds.includes(id)
+      );
+      if (duplicateIds.length > 0) {
+        throw new Error(`Egg IDs cannot be in both groups: ${duplicateIds.join(', ')}`);
+      }
+    }
+
+    // Update configuration
+    this.globalWinRateConfig = {
+      ...this.globalWinRateConfig,
+      ...config
+    };
+
+    console.log(`⚙️ Global Win Rate Config Updated:`, this.globalWinRateConfig);
+
+    return { ...this.globalWinRateConfig };
+  }
+
+  // Bulk update all eggs with the same win rate
+  async bulkUpdateEggWinRates(winningRate: number): Promise<EggData[]> {
+    if (winningRate < 0 || winningRate > 100) {
+      throw new Error("Win rate must be between 0 and 100");
+    }
+
+    const updatedEggs: EggData[] = [];
+
+    for (let i = 1; i <= TOTAL_EGGS; i++) {
+      const egg = this.eggs.get(i);
+      if (egg) {
+        egg.winningRate = winningRate;
+        this.eggs.set(i, egg);
+        updatedEggs.push(egg);
+      }
+    }
+
+    console.log(`⚙️ Bulk Update - All eggs win rate set to ${winningRate}%`);
+
+    return updatedEggs;
+  }
+
+  // Bulk update all eggs with the same reward
+  async bulkUpdateEggRewards(reward: number | string): Promise<EggData[]> {
+    // Validate reward input
+    if (typeof reward === 'string' && reward.trim().length === 0) {
+      throw new Error("Reward string cannot be empty");
+    }
+    if (typeof reward === 'number' && reward < 0) {
+      throw new Error("Reward number cannot be negative");
+    }
+
+    const updatedEggs: EggData[] = [];
+
+    for (let i = 1; i <= TOTAL_EGGS; i++) {
+      const egg = this.eggs.get(i);
+      if (egg) {
+        egg.reward = reward;
+        this.eggs.set(i, egg);
+        updatedEggs.push(egg);
+      }
+    }
+
+    console.log(`Bulk updated ${updatedEggs.length} eggs with reward "${reward}"`);
+    return updatedEggs;
   }
 }
 

@@ -9,13 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { UpdateEggRequest, CreateLinkRequest, LinkResponse } from "@shared/schema";
+import { UpdateEggRequest, CreateLinkRequest, LinkResponse, GlobalWinRateConfig, UpdateGlobalWinRateRequest, BulkUpdateWinRatesRequest, BulkUpdateRewardsRequest } from "@shared/schema";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import QRCode from "qrcode";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { formatReward } from "@/lib/game";
 
 // QR Code dialog component
 const QRCodeDialog = ({ 
@@ -95,6 +97,18 @@ const AdminPage = () => {
   
   // Republish state
   const [republishLink, setRepublishLink] = useState<LinkResponse | null>(null);
+
+  // Global win rate state
+  const [globalWinRateEnabled, setGlobalWinRateEnabled] = useState<boolean>(false);
+  const [globalWinRate, setGlobalWinRate] = useState<number>(30);
+  const [useGroups, setUseGroups] = useState<boolean>(false);
+  const [winRateSystemEnabled, setWinRateSystemEnabled] = useState<boolean>(false); // NEW: Master toggle
+  const [groupAWinRate, setGroupAWinRate] = useState<number>(20);
+  const [groupBWinRate, setGroupBWinRate] = useState<number>(80);
+  const [groupAEggs, setGroupAEggs] = useState<number[]>([1, 2, 3, 4]);
+  const [groupBEggs, setGroupBEggs] = useState<number[]>([5, 6, 7, 8]);
+  const [bulkWinRate, setBulkWinRate] = useState<number>(50);
+  const [bulkReward, setBulkReward] = useState<string>("iPhone");
   
   // Fetch all eggs
   const { data: eggs = [], isLoading: eggsLoading } = useQuery<EggData[]>({
@@ -105,6 +119,35 @@ const AdminPage = () => {
   const { data: links = [], isLoading: linksLoading } = useQuery<LinkResponse[]>({
     queryKey: ["/api/admin/links"],
   });
+
+  // Fetch global win rate configuration
+  const { data: globalWinRateConfig } = useQuery<GlobalWinRateConfig>({
+    queryKey: ["/api/admin/global-win-rate"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/admin/global-win-rate");
+      return response.json();
+    }
+  });
+
+  // Update local state when global win rate config is fetched
+  useEffect(() => {
+    if (globalWinRateConfig) {
+      setGlobalWinRateEnabled(globalWinRateConfig.enabled);
+      setGlobalWinRate(globalWinRateConfig.globalWinRate);
+      setUseGroups(globalWinRateConfig.useGroups);
+      setWinRateSystemEnabled(globalWinRateConfig.winRateSystemEnabled || false); // NEW: Handle master toggle
+      if (globalWinRateConfig.groups) {
+        if (globalWinRateConfig.groups.groupA) {
+          setGroupAWinRate(globalWinRateConfig.groups.groupA.winRate);
+          setGroupAEggs(globalWinRateConfig.groups.groupA.eggIds);
+        }
+        if (globalWinRateConfig.groups.groupB) {
+          setGroupBWinRate(globalWinRateConfig.groups.groupB.winRate);
+          setGroupBEggs(globalWinRateConfig.groups.groupB.eggIds);
+        }
+      }
+    }
+  }, [globalWinRateConfig]);
   
   // Update egg reward mutation
   const { mutate: updateEggReward } = useMutation({
@@ -220,7 +263,7 @@ const AdminPage = () => {
         title: "Xóa link thành công",
         description: "Link đã được xóa.",
       });
-      
+
       // Invalidate query
       queryClient.invalidateQueries({ queryKey: ["/api/admin/links"] });
     },
@@ -228,6 +271,81 @@ const AdminPage = () => {
       toast({
         title: "Lỗi",
         description: "Không thể xóa link. Hãy thử lại.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update global win rate configuration mutation
+  const { mutate: updateGlobalWinRateConfig } = useMutation({
+    mutationFn: async (data: UpdateGlobalWinRateRequest) => {
+      const response = await apiRequest("POST", "/api/admin/global-win-rate", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Cập nhật thành công",
+        description: "Cấu hình tỉ lệ trúng thưởng toàn cục đã được cập nhật.",
+      });
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/global-win-rate"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/eggs"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Lỗi",
+        description: "Không thể cập nhật cấu hình tỉ lệ trúng thưởng. Hãy thử lại.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Bulk update egg win rates mutation
+  const { mutate: bulkUpdateWinRates } = useMutation({
+    mutationFn: async (data: BulkUpdateWinRatesRequest) => {
+      const response = await apiRequest("POST", "/api/admin/bulk-update-win-rates", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Cập nhật thành công",
+        description: "Tỉ lệ trúng thưởng của tất cả trứng đã được cập nhật.",
+      });
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/eggs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/game-state"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Lỗi",
+        description: "Không thể cập nhật tỉ lệ trúng thưởng. Hãy thử lại.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Bulk update egg rewards mutation
+  const { mutate: bulkUpdateRewards } = useMutation({
+    mutationFn: async (data: BulkUpdateRewardsRequest) => {
+      const response = await apiRequest("POST", "/api/admin/bulk-update-rewards", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Cập nhật thành công",
+        description: "Phần thưởng của tất cả trứng đã được cập nhật.",
+      });
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/eggs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/game-state"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Lỗi",
+        description: "Không thể cập nhật phần thưởng. Hãy thử lại.",
         variant: "destructive",
       });
     },
@@ -318,6 +436,57 @@ const AdminPage = () => {
       });
     }
   };
+
+  // Handle global win rate configuration update
+  const handleUpdateGlobalWinRate = () => {
+    const config: UpdateGlobalWinRateRequest = {
+      enabled: globalWinRateEnabled,
+      globalWinRate: globalWinRate,
+      useGroups: useGroups,
+      winRateSystemEnabled: winRateSystemEnabled // NEW: Include master toggle
+    };
+
+    if (useGroups) {
+      config.groups = {
+        groupA: {
+          winRate: groupAWinRate,
+          eggIds: groupAEggs
+        },
+        groupB: {
+          winRate: groupBWinRate,
+          eggIds: groupBEggs
+        }
+      };
+    }
+
+    updateGlobalWinRateConfig(config);
+  };
+
+  // Handle bulk update win rates
+  const handleBulkUpdateWinRates = () => {
+    if (confirm(`Bạn có chắc muốn áp dụng tỉ lệ trúng thưởng ${bulkWinRate}% cho tất cả 8 quả trứng không?`)) {
+      bulkUpdateWinRates({ winningRate: bulkWinRate });
+    }
+  };
+
+  // Handle bulk update rewards
+  const handleBulkUpdateRewards = () => {
+    if (confirm(`Bạn có chắc muốn áp dụng phần thưởng "${bulkReward}" cho tất cả 8 quả trứng không?`)) {
+      bulkUpdateRewards({ reward: bulkReward });
+    }
+  };
+
+  // Helper function to get egg group info
+  const getEggGroupInfo = (eggId: number) => {
+    if (!globalWinRateEnabled || !useGroups) return null;
+
+    if (groupAEggs.includes(eggId)) {
+      return { group: 'A', winRate: groupAWinRate, color: 'bg-blue-100 text-blue-800' };
+    } else if (groupBEggs.includes(eggId)) {
+      return { group: 'B', winRate: groupBWinRate, color: 'bg-green-100 text-green-800' };
+    }
+    return null;
+  };
   
   return (
     <div className="container mx-auto py-8">
@@ -339,19 +508,382 @@ const AdminPage = () => {
         </a>
       </div>
       
-      <Tabs defaultValue="eggs">
+      <Tabs defaultValue="global-win-rate">
         <TabsList className="mb-4">
+          <TabsTrigger value="global-win-rate">Tỉ lệ trúng thưởng toàn cục</TabsTrigger>
           <TabsTrigger value="eggs">Cài đặt phần thưởng</TabsTrigger>
           <TabsTrigger value="links">Quản lý link</TabsTrigger>
         </TabsList>
-        
+
+        {/* Global Win Rate tab content */}
+        <TabsContent value="global-win-rate">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Global Win Rate Configuration */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Cấu hình tỉ lệ trúng thưởng toàn cục</CardTitle>
+                <CardDescription>
+                  Thiết lập tỉ lệ trúng thưởng áp dụng cho tất cả các quả trứng thay vì cài đặt riêng lẻ.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* NEW: Master Win Rate System Toggle */}
+                <div className="flex items-center justify-between p-4 border-2 border-orange-200 rounded-lg bg-orange-50">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-semibold text-orange-800">Hệ thống tỉ lệ trúng thưởng</Label>
+                    <div className="text-sm text-orange-700">
+                      <strong>BẬT:</strong> Áp dụng tỉ lệ trúng thưởng (có thể thua) | <strong>TẮT:</strong> Luôn trả thưởng 100% (đảm bảo kết quả)
+                    </div>
+                  </div>
+                  <Switch
+                    checked={winRateSystemEnabled}
+                    onCheckedChange={setWinRateSystemEnabled}
+                  />
+                </div>
+
+                {!winRateSystemEnabled && (
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-md">
+                    <div className="text-sm text-green-800">
+                      <strong>🎯 Chế độ đảm bảo kết quả:</strong> Tất cả trứng sẽ luôn trả về phần thưởng đã cấu hình với xác suất 100%.
+                      Không có yếu tố ngẫu nhiên - mọi trứng đều đảm bảo trúng thưởng.
+                    </div>
+                  </div>
+                )}
+
+                {winRateSystemEnabled && (
+                  <>
+                    <Separator />
+
+                    {/* Enable Global Win Rate */}
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-base">Kích hoạt tỉ lệ trúng thưởng toàn cục</Label>
+                        <div className="text-sm text-muted-foreground">
+                          Khi bật, tỉ lệ trúng thưởng toàn cục sẽ ghi đè tỉ lệ riêng lẻ của từng trứng
+                        </div>
+                      </div>
+                      <Switch
+                        checked={globalWinRateEnabled}
+                        onCheckedChange={setGlobalWinRateEnabled}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {winRateSystemEnabled && globalWinRateEnabled && (
+                  <>
+                    <Separator />
+
+                    {/* Configuration Mode */}
+                    <div className="space-y-3">
+                      <Label className="text-base">Chế độ cấu hình</Label>
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="radio"
+                            id="single-rate"
+                            name="config-mode"
+                            checked={!useGroups}
+                            onChange={() => setUseGroups(false)}
+                          />
+                          <Label htmlFor="single-rate">Tỉ lệ trúng thưởng chung cho tất cả trứng</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="radio"
+                            id="group-rates"
+                            name="config-mode"
+                            checked={useGroups}
+                            onChange={() => setUseGroups(true)}
+                          />
+                          <Label htmlFor="group-rates">Tỉ lệ trúng thưởng theo nhóm tùy chỉnh</Label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {!useGroups ? (
+                      /* Single Global Rate */
+                      <div className="space-y-3">
+                        <Label className="text-base">Tỉ lệ trúng thưởng toàn cục (%)</Label>
+                        <div className="flex items-center space-x-4">
+                          <Slider
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={[globalWinRate]}
+                            onValueChange={(values) => setGlobalWinRate(values[0])}
+                            className="flex-1"
+                          />
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={globalWinRate}
+                            onChange={(e) => setGlobalWinRate(Number(e.target.value))}
+                            className="w-20"
+                          />
+                          <span>%</span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Tất cả 8 quả trứng sẽ có tỉ lệ trúng thưởng {globalWinRate}%
+                        </div>
+                      </div>
+                    ) : (
+                      /* Group-based Rates */
+                      <div className="space-y-6">
+                        {/* Group A Configuration */}
+                        <div className="space-y-4 p-4 border rounded-lg bg-blue-50">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-base font-semibold text-blue-800">Nhóm A</Label>
+                            <span className="text-sm text-blue-600">{groupAWinRate}% tỉ lệ trúng</span>
+                          </div>
+
+                          <div className="space-y-3">
+                            <Label className="text-sm">Tỉ lệ trúng thưởng (%)</Label>
+                            <div className="flex items-center space-x-4">
+                              <Slider
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={[groupAWinRate]}
+                                onValueChange={(values) => setGroupAWinRate(values[0])}
+                                className="flex-1"
+                              />
+                              <Input
+                                type="number"
+                                min={0}
+                                max={100}
+                                value={groupAWinRate}
+                                onChange={(e) => setGroupAWinRate(Number(e.target.value))}
+                                className="w-20"
+                              />
+                              <span>%</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">Trứng được gán vào Nhóm A</Label>
+                            <div className="flex flex-wrap gap-2">
+                              {[1, 2, 3, 4, 5, 6, 7, 8].map(eggId => (
+                                <button
+                                  key={eggId}
+                                  onClick={() => {
+                                    if (groupAEggs.includes(eggId)) {
+                                      setGroupAEggs(groupAEggs.filter(id => id !== eggId));
+                                    } else {
+                                      setGroupAEggs([...groupAEggs, eggId]);
+                                      setGroupBEggs(groupBEggs.filter(id => id !== eggId));
+                                    }
+                                  }}
+                                  className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                                    groupAEggs.includes(eggId)
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                  }`}
+                                >
+                                  Trứng {eggId}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="text-xs text-blue-600">
+                              Đã chọn: {groupAEggs.length > 0 ? groupAEggs.sort().join(', ') : 'Chưa có trứng nào'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Group B Configuration */}
+                        <div className="space-y-4 p-4 border rounded-lg bg-green-50">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-base font-semibold text-green-800">Nhóm B</Label>
+                            <span className="text-sm text-green-600">{groupBWinRate}% tỉ lệ trúng</span>
+                          </div>
+
+                          <div className="space-y-3">
+                            <Label className="text-sm">Tỉ lệ trúng thưởng (%)</Label>
+                            <div className="flex items-center space-x-4">
+                              <Slider
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={[groupBWinRate]}
+                                onValueChange={(values) => setGroupBWinRate(values[0])}
+                                className="flex-1"
+                              />
+                              <Input
+                                type="number"
+                                min={0}
+                                max={100}
+                                value={groupBWinRate}
+                                onChange={(e) => setGroupBWinRate(Number(e.target.value))}
+                                className="w-20"
+                              />
+                              <span>%</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">Trứng được gán vào Nhóm B</Label>
+                            <div className="flex flex-wrap gap-2">
+                              {[1, 2, 3, 4, 5, 6, 7, 8].map(eggId => (
+                                <button
+                                  key={eggId}
+                                  onClick={() => {
+                                    if (groupBEggs.includes(eggId)) {
+                                      setGroupBEggs(groupBEggs.filter(id => id !== eggId));
+                                    } else {
+                                      setGroupBEggs([...groupBEggs, eggId]);
+                                      setGroupAEggs(groupAEggs.filter(id => id !== eggId));
+                                    }
+                                  }}
+                                  className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                                    groupBEggs.includes(eggId)
+                                      ? 'bg-green-600 text-white'
+                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                  }`}
+                                >
+                                  Trứng {eggId}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="text-xs text-green-600">
+                              Đã chọn: {groupBEggs.length > 0 ? groupBEggs.sort().join(', ') : 'Chưa có trứng nào'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-sm text-muted-foreground p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                          <strong>Lưu ý:</strong> Mỗi trứng chỉ có thể thuộc về một nhóm. Khi bạn chọn trứng cho một nhóm, nó sẽ tự động bị loại khỏi nhóm khác.
+                        </div>
+                      </div>
+                    )}
+
+                    <Button onClick={handleUpdateGlobalWinRate} className="w-full">
+                      Cập nhật cấu hình toàn cục
+                    </Button>
+                  </>
+                )}
+
+                {/* Save button for win rate system toggle - always show when system is enabled */}
+                <Button onClick={handleUpdateGlobalWinRate} className="w-full">
+                  Lưu cấu hình hệ thống tỉ lệ trúng thưởng
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Bulk Update Tools */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Công cụ cập nhật hàng loạt</CardTitle>
+                <CardDescription>
+                  Áp dụng cùng một tỉ lệ trúng thưởng cho tất cả các quả trứng (chế độ riêng lẻ).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <Label className="text-base">Tỉ lệ trúng thưởng cho tất cả trứng (%)</Label>
+                  <div className="flex items-center space-x-4">
+                    <Slider
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={[bulkWinRate]}
+                      onValueChange={(values) => setBulkWinRate(values[0])}
+                      className="flex-1"
+                    />
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={bulkWinRate}
+                      onChange={(e) => setBulkWinRate(Number(e.target.value))}
+                      className="w-20"
+                    />
+                    <span>%</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <div className="text-sm text-yellow-800">
+                    <strong>Lưu ý:</strong> Thao tác này sẽ cập nhật tỉ lệ trúng thưởng riêng lẻ của tất cả 8 quả trứng.
+                    Nếu bạn đang sử dụng tỉ lệ trúng thưởng toàn cục, hãy sử dụng cấu hình bên trái thay thế.
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleBulkUpdateWinRates}
+                  variant="outline"
+                  className="w-full"
+                  disabled={globalWinRateEnabled}
+                >
+                  Áp dụng cho tất cả trứng
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
         {/* Eggs tab content */}
         <TabsContent value="eggs">
+          {/* Bulk Reward Configuration */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Cấu hình phần thưởng hàng loạt</CardTitle>
+              <CardDescription>
+                Áp dụng cùng một phần thưởng cho tất cả 8 quả trứng cùng lúc.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <Label className="text-base">Phần thưởng cho tất cả trứng</Label>
+                <Input
+                  type="text"
+                  value={bulkReward}
+                  onChange={(e) => setBulkReward(e.target.value)}
+                  placeholder="Nhập phần thưởng (vd: iPhone, 100, MacBook Pro)"
+                  className="w-full"
+                />
+                <div className="text-sm text-muted-foreground">
+                  Bạn có thể nhập văn bản (như "iPhone") hoặc số (như "100"). Phần thưởng này sẽ được áp dụng cho tất cả 8 quả trứng.
+                </div>
+              </div>
+
+              <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+                <div className="text-sm text-green-800">
+                  <strong>Lưu ý:</strong> Với hệ thống phần thưởng được đảm bảo 100%, mọi quả trứng sẽ luôn trả về phần thưởng đã cấu hình.
+                  Thao tác này chỉ thay đổi phần thưởng và giữ nguyên tỉ lệ trúng thưởng hiện tại.
+                </div>
+              </div>
+
+              <Button
+                onClick={handleBulkUpdateRewards}
+                className="w-full"
+                disabled={!bulkReward.trim()}
+              >
+                Áp dụng phần thưởng cho tất cả trứng
+              </Button>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Các quả trứng vàng</CardTitle>
               <CardDescription>
                 Điều chỉnh phần thưởng và tỉ lệ trúng thưởng cho từng quả trứng vàng.
+                {globalWinRateEnabled && (
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="text-sm text-blue-800">
+                      <strong>Lưu ý:</strong> Tỉ lệ trúng thưởng toàn cục đang được kích hoạt.
+                      {useGroups ? (
+                        <div className="mt-2">
+                          <div>• Nhóm A ({groupAWinRate}%): Trứng {groupAEggs.length > 0 ? groupAEggs.sort().join(', ') : 'chưa có'}</div>
+                          <div>• Nhóm B ({groupBWinRate}%): Trứng {groupBEggs.length > 0 ? groupBEggs.sort().join(', ') : 'chưa có'}</div>
+                        </div>
+                      ) : (
+                        <span> Tất cả trứng sử dụng tỉ lệ {globalWinRate}%.</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -374,7 +906,19 @@ const AdminPage = () => {
                   ) : (
                     eggs.map((egg) => (
                       <TableRow key={egg.id}>
-                        <TableCell className="font-medium">Trứng #{egg.id}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center space-x-2">
+                            <span>Trứng #{egg.id}</span>
+                            {(() => {
+                              const groupInfo = getEggGroupInfo(egg.id);
+                              return groupInfo ? (
+                                <span className={`px-2 py-1 text-xs rounded-full ${groupInfo.color}`}>
+                                  Nhóm {groupInfo.group} ({groupInfo.winRate}%)
+                                </span>
+                              ) : null;
+                            })()}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           {editingEgg === egg.id ? (
                             <Input
@@ -391,38 +935,18 @@ const AdminPage = () => {
                         <TableCell>
                           {editingEgg === egg.id ? (
                             <div className="flex items-center space-x-2">
-                              <Slider
-                                min={0}
-                                max={100}
-                                step={1}
-                                value={[eggWinningRate]}
-                                onValueChange={(values) => setEggWinningRate(values[0])}
-                                className="w-32"
-                              />
                               <Input
                                 type="number"
                                 min={0}
                                 max={100}
                                 value={eggWinningRate}
                                 onChange={(e) => setEggWinningRate(Number(e.target.value))}
-                                className="w-16"
+                                className="w-20"
                               />
                               <span>%</span>
                             </div>
                           ) : (
-                            <div className="flex items-center">
-                              <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2">
-                                <div 
-                                  className={`h-2.5 rounded-full ${
-                                    egg.winningRate > 80 ? 'bg-green-500' : 
-                                    egg.winningRate > 40 ? 'bg-yellow-500' : 
-                                    'bg-red-500'
-                                  }`}
-                                  style={{ width: `${egg.winningRate}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-sm">{egg.winningRate}%</span>
-                            </div>
+                            <span className="text-sm">{egg.winningRate}%</span>
                           )}
                         </TableCell>
                         <TableCell>

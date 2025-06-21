@@ -89,8 +89,10 @@ const RewardNotification = ({ isOpen, onClose, reward }: RewardNotificationProps
     { top: '85%', left: '20%' },
   ];
   
-  // Format reward để hiển thị 2 số thập phân hoặc text
-  const formattedReward = typeof reward === 'string' ? reward : reward.toFixed(2);
+  // FIX: Format reward to handle both strings and numbers
+  const formattedReward = typeof reward === 'string'
+    ? reward
+    : reward.toFixed(2);
   
   return (
     <AnimatePresence>

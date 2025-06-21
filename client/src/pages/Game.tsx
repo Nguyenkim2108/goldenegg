@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { GameState, RevealAllEggsResult } from "@shared/schema";
+import { GameState } from "@shared/schema";
 import CountdownTimer from "@/components/CountdownTimer";
 import EggGrid from "@/components/EggGrid";
 import RewardNotification from "@/components/RewardNotification";
@@ -42,49 +42,42 @@ const Game = () => {
     onSuccess: (data) => {
       console.log("🎯 Break egg API response:", data);
 
-      if (data.eggs) {
-        // Case: Trả về là RevealAllEggsResult - khi đập trứng với link
-        const revealData = data as RevealAllEggsResult;
-        console.log("🎯 Processing RevealAllEggsResult:", revealData);
+      // FIX: Since we disabled "reveal all eggs", API now always returns BreakEggResult
+      // Handle both custom links and regular game the same way
+      console.log("🎯 Processing BreakEggResult:", data);
 
-        // Lưu thông tin trứng được đập
-        setBrokenEggs([revealData.brokenEggId]);
-        console.log("🥚 Setting brokenEggs:", [revealData.brokenEggId]);
+      // Cập nhật trạng thái trứng vỡ - chỉ trứng được click
+      setBrokenEggs(prev => {
+        if (prev.includes(data.eggId)) {
+          return prev; // Already broken, don't add again
+        }
+        return [...prev, data.eggId];
+      });
+      console.log("🥚 Adding to brokenEggs:", data.eggId);
 
-        // Lưu phần thưởng của tất cả các quả trứng
-        const rewardsMap: {[key: number]: number | string} = {};
-        revealData.eggs.forEach(egg => {
-          rewardsMap[egg.id] = egg.reward;
-        });
-        console.log("🎁 Setting eggRewards:", rewardsMap);
-        setEggRewards(rewardsMap);
+      // FIX: Display the actual reward (string or number) instead of converting to 0
+      setCurrentReward(data.reward);
+      setShowReward(true);
+      console.log("🎁 Setting currentReward:", data.reward);
 
-        // Đánh dấu tất cả trứng đã được tiết lộ
-        console.log("🔓 Setting allEggsRevealed to true");
-        setAllEggsRevealed(true);
-
-        // Hiển thị phần thưởng cho quả trứng được đập
-        console.log("💰 Setting currentReward:", revealData.reward);
-        setCurrentReward(revealData.reward);
-        setShowReward(true);
-      } else {
-        // Case: Trả về là BreakEggResult - khi đập trứng thông thường
-      // Update broken eggs
-      setBrokenEggs((prev) => [...prev, data.eggId]);
-      
-      // Store egg reward
+      // Cập nhật phần thưởng cho trứng này
       setEggRewards(prev => ({
         ...prev,
         [data.eggId]: data.reward
       }));
-      
-      // Show reward notification
-      setCurrentReward(data.reward);
-      setShowReward(true);
-      
-      // Update progress
-      const newProgress = (brokenEggs.length + 1) / 9 * 100;
-      setProgress(newProgress);
+      console.log("💰 Adding to eggRewards:", { [data.eggId]: data.reward });
+
+      // FIX: Don't mark all eggs as revealed for custom links
+      // Only the clicked egg should be broken, others remain intact
+      if (linkId) {
+        console.log("🔍 Custom link used - only clicked egg should break");
+        // Don't set allEggsRevealed to true - this was causing multiple eggs to appear broken
+      }
+
+      // Cập nhật progress (chỉ cho chế độ thông thường)
+      if (!linkId) {
+        const newProgress = (brokenEggs.length + 1) / 8 * 100; // Changed from 9 to 8 eggs
+        setProgress(newProgress);
       }
       
       // Invalidate queries
@@ -112,25 +105,24 @@ const Game = () => {
 
   // Handle egg click
   const handleEggClick = (eggId: number) => {
-    // Nếu đã đập một quả trứng trong chế độ link, không cho phép đập thêm
-    if (allEggsRevealed && linkId) {
-      alert("Bạn chỉ được đập một quả trứng duy nhất. Vui lòng sử dụng link khác để đập trứng khác.");
-      return;
-    }
-    
-    // Kiểm tra xem có đang sử dụng link
+    // FIX: For custom links, only allow one egg to be broken
     if (linkId) {
       // Kiểm tra xem link đã được sử dụng chưa
       if (gameData?.linkUsed) {
         alert("Link này đã được sử dụng. Vui lòng sử dụng link khác.");
         return;
       }
-      
-      // Cho phép đập bất kỳ quả trứng nào khi sử dụng link
-      // Không cần kiểm tra quả trứng được phép đập nữa
+
+      // Kiểm tra xem đã có trứng nào bị vỡ chưa (chỉ cho phép 1 trứng)
+      if (brokenEggs.length > 0) {
+        alert("Bạn chỉ được đập một quả trứng duy nhất. Vui lòng sử dụng link khác để đập trứng khác.");
+        return;
+      }
+
+      // Cho phép đập trứng được click
       breakEgg(eggId);
     } else {
-      // Chế độ thông thường
+      // Chế độ thông thường - cho phép đập nhiều trứng
       if (!brokenEggs.includes(eggId)) {
         breakEgg(eggId);
       }
@@ -172,15 +164,20 @@ const Game = () => {
       setBrokenEggs(gameData.brokenEggs || []);
       setProgress(gameData.progress || 0);
 
-      // Xử lý trạng thái link đã sử dụng
+      // FIX: For custom links, don't set allEggsRevealed to true
+      // This was causing all eggs to appear broken when only one should be
       if (gameData.linkId && gameData.linkUsed) {
-        setAllEggsRevealed(true);
+        // Don't set allEggsRevealed for custom links - only individual eggs should show as broken
+        // setAllEggsRevealed(true); // REMOVED - this was the bug
 
-        // Nếu link đã được sử dụng, lấy thông tin tất cả các quả trứng
+        // Only set rewards for actually broken eggs, not all eggs
         if (gameData.eggs && gameData.eggs.length > 0) {
           const rewards: {[key: number]: number | string} = {};
           gameData.eggs.forEach(egg => {
-            rewards[egg.id] = egg.reward;
+            // Only add rewards for eggs that are actually broken
+            if (egg.broken) {
+              rewards[egg.id] = egg.reward;
+            }
           });
           setEggRewards(rewards);
         }
@@ -210,8 +207,8 @@ const Game = () => {
         {linkId > 0 && (
           <div className="mb-3 p-2 bg-[hsl(var(--red-primary))]/20 rounded-lg text-center">
             <span className="text-white text-sm">
-              {gameData?.linkUsed || allEggsRevealed
-                ? "Link này đã được sử dụng. Chỉ có thể xem phần thưởng." 
+              {gameData?.linkUsed || brokenEggs.length > 0
+                ? "Link này đã được sử dụng. Chỉ có thể xem phần thưởng."
                 : `Bạn chỉ được đập 1 quả trứng duy nhất.`}
             </span>
           </div>
@@ -221,12 +218,13 @@ const Game = () => {
           <CountdownTimer deadline={deadline} />
           
           {/* Egg Grid */}
-          <EggGrid 
-            brokenEggs={brokenEggs} 
-            onEggClick={handleEggClick} 
+          <EggGrid
+            brokenEggs={brokenEggs}
+            onEggClick={handleEggClick}
           eggRewards={eggRewards}
           allEggsRevealed={allEggsRevealed}
           allowedEggId={undefined} // Không cần đánh dấu quả trứng nào được phép đập nữa
+          linkId={linkId} // NEW: Pass linkId to determine custom link mode
           />
           
         {/* Claim/Reset Button And Progress Bar */}

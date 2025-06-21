@@ -27,7 +27,10 @@ export const generateRandomReward = (): number => {
   return Math.floor(Math.random() * (MAX_REWARD - MIN_REWARD + 1) + MIN_REWARD);
 };
 
-export const formatReward = (reward: number): string => {
+export const formatReward = (reward: number | string): string => {
+  if (typeof reward === 'string') {
+    return reward;
+  }
   return `${(reward / 1000).toFixed(2)} K`;
 };
 

@@ -1,7 +1,8 @@
 import type { Express, Request, Response, NextFunction } from "express";
+import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { UpdateEggRequest, CreateLinkRequest, BreakEggByLinkRequest, SetEggBrokenStateRequest } from "../shared/types";
+import { UpdateEggRequest, CreateLinkRequest, BreakEggByLinkRequest, SetEggBrokenStateRequest } from "@shared/schema";
 
 // Auth middleware
 const requireAuth = (req: Request, res: Response, next: NextFunction) => {
@@ -17,54 +18,7 @@ const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
-export function registerRoutes(app: Express): void {
-  // ----------- Test Routes -----------
-
-  // Simple test endpoint
-  app.get("/api/test", async (req, res) => {
-    try {
-      res.json({
-        message: "API is working!",
-        timestamp: new Date().toISOString(),
-        success: true
-      });
-    } catch (error) {
-      console.error("Test endpoint error:", error);
-      const message = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({ message: "Test failed", error: message });
-    }
-  });
-
-  // Storage test endpoint
-  app.get("/api/test-storage", async (req, res) => {
-    try {
-      console.log("🧪 Testing storage...");
-      console.log("Storage object:", typeof storage);
-
-      // Test basic storage methods
-      const eggs = await storage.getAllEggs();
-      console.log("✅ getAllEggs works, count:", eggs.length);
-
-      const links = await storage.getCustomLinks();
-      console.log("✅ getCustomLinks works, count:", links.length);
-
-      res.json({
-        message: "Storage test successful!",
-        eggsCount: eggs.length,
-        linksCount: links.length,
-        success: true
-      });
-    } catch (error) {
-      console.error("❌ Storage test error:", error);
-      const message = error instanceof Error ? error.message : "Unknown error";
-      res.status(500).json({
-        message: "Storage test failed",
-        error: message,
-        stack: error instanceof Error ? error.stack : String(error)
-      });
-    }
-  });
-
+export async function registerRoutes(app: Express): Promise<Server> {
   // ----------- Public Routes -----------
   
   // Game state endpoint - thêm tham số linkId
@@ -99,12 +53,8 @@ export function registerRoutes(app: Express): void {
       // Process egg break
       const breakResult = await storage.breakEgg(eggId, linkId);
 
-      // Nếu có linkId, tiết lộ tất cả các quả trứng khác
-      if (linkId) {
-        const revealResult = await storage.revealAllEggs(linkId, eggId, breakResult.reward);
-        return res.json(revealResult);
-      }
-
+      // MODIFICATION 2: Disable "reveal all eggs" functionality
+      // Only return the result of the specifically broken egg, don't reveal others
       res.json(breakResult);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to break egg";
@@ -175,14 +125,11 @@ export function registerRoutes(app: Express): void {
   // Get all eggs (admin only)
   app.get("/api/admin/eggs", requireAdmin, async (req, res) => {
     try {
-      console.log("🥚 Admin eggs endpoint called");
       const eggs = await storage.getAllEggs();
-      console.log("🥚 Eggs retrieved:", eggs.length, "eggs");
       res.json(eggs);
     } catch (error) {
-      console.error("❌ Admin eggs error:", error);
       const message = error instanceof Error ? error.message : "Failed to get eggs";
-      res.status(500).json({ message, error: error instanceof Error ? error.stack : String(error) });
+      res.status(500).json({ message });
     }
   });
   
@@ -247,14 +194,11 @@ export function registerRoutes(app: Express): void {
   // Get all custom links (admin only)
   app.get("/api/admin/links", requireAdmin, async (req, res) => {
     try {
-      console.log("🔗 Admin links endpoint called");
       const links = await storage.getCustomLinks();
-      console.log("🔗 Links retrieved:", links.length, "links");
       res.json(links);
     } catch (error) {
-      console.error("❌ Admin links error:", error);
       const message = error instanceof Error ? error.message : "Failed to get links";
-      res.status(500).json({ message, error: error instanceof Error ? error.stack : String(error) });
+      res.status(500).json({ message });
     }
   });
   
@@ -323,4 +267,110 @@ export function registerRoutes(app: Express): void {
       res.status(500).json({ message });
     }
   });
+
+  // Get global win rate configuration (admin only)
+  app.get("/api/admin/global-win-rate", requireAdmin, async (req, res) => {
+    try {
+      const config = await storage.getGlobalWinRateConfig();
+      res.json(config);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to get global win rate config";
+      res.status(500).json({ message });
+    }
+  });
+
+  // Update global win rate configuration (admin only)
+  app.post("/api/admin/global-win-rate", requireAdmin, async (req, res) => {
+    try {
+      // Validate request body
+      const schema = z.object({
+        enabled: z.boolean().optional(),
+        globalWinRate: z.number().min(0).max(100).optional(),
+        useGroups: z.boolean().optional(),
+        winRateSystemEnabled: z.boolean().optional(), // NEW: Master toggle for win rate system
+        groups: z.object({
+          groupA: z.object({
+            winRate: z.number().min(0).max(100),
+            eggIds: z.array(z.number().min(1).max(8))
+          }),
+          groupB: z.object({
+            winRate: z.number().min(0).max(100),
+            eggIds: z.array(z.number().min(1).max(8))
+          })
+        }).optional()
+      });
+
+      const result = schema.safeParse(req.body);
+      if (!result.success) {
+        console.log("❌ Validation failed:", result.error.format());
+        return res.status(400).json({
+          message: "Invalid request",
+          details: result.error.format()
+        });
+      }
+
+      console.log("✅ Request body validated:", JSON.stringify(result.data, null, 2));
+      const updatedConfig = await storage.updateGlobalWinRateConfig(result.data);
+      console.log("✅ Updated config:", JSON.stringify(updatedConfig, null, 2));
+      res.json(updatedConfig);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update global win rate config";
+      res.status(500).json({ message });
+    }
+  });
+
+  // Bulk update all egg win rates (admin only)
+  app.post("/api/admin/bulk-update-win-rates", requireAdmin, async (req, res) => {
+    try {
+      // Validate request body
+      const schema = z.object({
+        winningRate: z.number().min(0).max(100)
+      });
+
+      const result = schema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({
+          message: "Invalid request",
+          details: result.error.format()
+        });
+      }
+
+      const updatedEggs = await storage.bulkUpdateEggWinRates(result.data.winningRate);
+      res.json(updatedEggs);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to bulk update win rates";
+      res.status(500).json({ message });
+    }
+  });
+
+  // Bulk update all egg rewards (admin only)
+  app.post("/api/admin/bulk-update-rewards", requireAdmin, async (req, res) => {
+    try {
+      console.log("Received bulk-update-rewards request:", req.body);
+
+      // Validate request body
+      const schema = z.object({
+        reward: z.union([z.number().min(0), z.string().min(1)]) // Allow both numbers and strings (minimum 1 character for strings)
+      });
+
+      const result = schema.safeParse(req.body);
+      if (!result.success) {
+        console.error("Validation error:", result.error);
+        return res.status(400).json({
+          message: "Invalid request",
+          details: result.error.format()
+        });
+      }
+
+      const updatedEggs = await storage.bulkUpdateEggRewards(result.data.reward);
+      console.log("Bulk reward update successful:", updatedEggs.length, "eggs updated");
+      res.json(updatedEggs);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to bulk update rewards";
+      console.error("Bulk reward update error:", message);
+      res.status(500).json({ message });
+    }
+  });
+
+  return createServer(app);
 }

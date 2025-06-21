@@ -16,12 +16,7 @@ export default defineConfig({
   },
   root: path.resolve("./client"),
   build: {
-    outDir: path.resolve("./dist"),
+    outDir: path.resolve("./dist/public"),
     emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        manualChunks: undefined,
-      },
-    },
   },
 });

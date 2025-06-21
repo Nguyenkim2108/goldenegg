@@ -8,6 +8,7 @@ interface EggGridProps {
   eggRewards: {[key: number]: number | string};
   allEggsRevealed: boolean;
   allowedEggId?: number;
+  linkId?: number; // NEW: Add linkId to determine custom link mode
 }
 
 interface EggData {
@@ -17,7 +18,7 @@ interface EggData {
   allowed?: boolean;
 }
 
-const EggGrid = ({ brokenEggs, onEggClick, eggRewards, allEggsRevealed, allowedEggId }: EggGridProps) => {
+const EggGrid = ({ brokenEggs, onEggClick, eggRewards, allEggsRevealed, allowedEggId, linkId }: EggGridProps) => {
   const [eggs, setEggs] = useState<EggData[]>([]);
 
 
@@ -158,7 +159,7 @@ const EggGrid = ({ brokenEggs, onEggClick, eggRewards, allEggsRevealed, allowedE
             whileTap="tap"
           >
             {/* Egg SVG */}
-                {egg.broken || (allEggsRevealed && eggRewards[egg.id] !== undefined) ? (
+                {egg.broken || (!linkId && allEggsRevealed && eggRewards[egg.id] !== undefined) ? (
               // Broken egg with reward display
               <div className="relative">
                     {/* Enhanced glow effect for broken egg */}
@@ -448,8 +449,9 @@ const EggGrid = ({ brokenEggs, onEggClick, eggRewards, allEggsRevealed, allowedE
                           transition={{ duration: 1.5, repeat: Infinity }}
                         >
                           {(() => {
-                            // Kiểm tra xem trứng có được tiết lộ không (đã vỡ hoặc tất cả đã được tiết lộ)
-                            const isRevealed = egg.broken || (allEggsRevealed && eggRewards[egg.id] !== undefined);
+                            // FIX: For custom links, only show rewards for actually broken eggs
+                            // For regular game, show rewards for broken eggs OR when all eggs are revealed
+                            const isRevealed = egg.broken || (!linkId && allEggsRevealed && eggRewards[egg.id] !== undefined);
 
                             if (isRevealed) {
                               // Sử dụng eggRewards nếu có, nếu không thì dùng egg.reward

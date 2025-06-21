@@ -133,6 +133,50 @@ export interface LinkResponse {
   createdAt: string;
 }
 
+// Global win rate configuration
+export interface GlobalWinRateConfig {
+  enabled: boolean;
+  globalWinRate: number; // Global win percentage (0-100)
+  useGroups: boolean; // Whether to use custom groups instead of global rate
+  winRateSystemEnabled: boolean; // NEW: Master toggle for win rate system (ON/OFF)
+  groups?: {
+    groupA: {
+      winRate: number; // Win rate for Group A (0-100)
+      eggIds: number[]; // Array of egg IDs assigned to Group A
+    };
+    groupB: {
+      winRate: number; // Win rate for Group B (0-100)
+      eggIds: number[]; // Array of egg IDs assigned to Group B
+    };
+  };
+}
+
+// Request types for global win rate management
+export interface UpdateGlobalWinRateRequest {
+  enabled?: boolean;
+  globalWinRate?: number;
+  useGroups?: boolean;
+  winRateSystemEnabled?: boolean; // NEW: Master toggle for win rate system
+  groups?: {
+    groupA: {
+      winRate: number;
+      eggIds: number[];
+    };
+    groupB: {
+      winRate: number;
+      eggIds: number[];
+    };
+  };
+}
+
+export interface BulkUpdateWinRatesRequest {
+  winningRate: number;
+}
+
+export interface BulkUpdateRewardsRequest {
+  reward: number | string;
+}
+
 // Thêm các interface mới
 export interface GameLinkInfo {
   linkId: number;
